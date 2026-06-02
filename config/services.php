@@ -1,0 +1,58 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Third Party Services
+    |--------------------------------------------------------------------------
+    |
+    | This file is for storing the credentials for third party services such
+    | as Mailgun, Postmark, AWS and more. This file provides the de facto
+    | location for this type of information, allowing packages to have
+    | a conventional file to locate the various service credentials.
+    |
+    */
+
+    'postmark' => [
+        'key' => env('POSTMARK_API_KEY'),
+    ],
+
+    'resend' => [
+        'key' => env('RESEND_API_KEY'),
+    ],
+
+    'ses' => [
+        'key' => env('AWS_ACCESS_KEY_ID'),
+        'secret' => env('AWS_SECRET_ACCESS_KEY'),
+        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+    ],
+
+    'slack' => [
+        'notifications' => [
+            'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
+            'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
+        ],
+    ],
+
+    'football_data' => [
+        'token' => env('FOOTBALL_DATA_TOKEN'),
+        'base_url' => env('FOOTBALL_DATA_BASE_URL', 'https://api.football-data.org/v4'),
+        'competition' => env('FOOTBALL_DATA_COMPETITION', 'WC'),
+    ],
+
+    'predictions' => [
+        'reminder_lead_hours' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('REMINDER_LEAD_HOURS', '24,2'))
+        ))),
+    ],
+
+    'odds_api' => [
+        'key' => env('ODDS_API_KEY'),
+        'base_url' => env('ODDS_API_BASE_URL', 'https://api.the-odds-api.com/v4'),
+        'sport' => env('ODDS_API_SPORT', 'soccer_fifa_world_cup'),
+        'regions' => env('ODDS_API_REGIONS', 'eu'),
+    ],
+
+];

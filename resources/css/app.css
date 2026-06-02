@@ -1,0 +1,112 @@
+@import 'tailwindcss';
+@import '../../vendor/livewire/flux/dist/flux.css';
+
+@source '../views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../vendor/livewire/flux-pro/stubs/**/*.blade.php';
+@source '../../vendor/livewire/flux/stubs/**/*.blade.php';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-display: 'Barlow Condensed', 'Barlow', ui-sans-serif, system-ui, sans-serif;
+
+    --color-zinc-50: #fafafa;
+    --color-zinc-100: #f5f5f5;
+    --color-zinc-200: #e5e5e5;
+    --color-zinc-300: #d4d4d4;
+    --color-zinc-400: #a3a3a3;
+    --color-zinc-500: #737373;
+    --color-zinc-600: #525252;
+    --color-zinc-700: #404040;
+    --color-zinc-800: #262626;
+    --color-zinc-900: #171717;
+    --color-zinc-950: #0a0a0a;
+
+    /* Valicare brand cyan */
+    --color-brand-50: #ecf9fe;
+    --color-brand-100: #d0f0fc;
+    --color-brand-200: #a5e4f9;
+    --color-brand-300: #6fd3f4;
+    --color-brand-400: #38c0ec;
+    --color-brand-500: #14aadc;
+    --color-brand-600: #0d88b8;
+    --color-brand-700: #0e6d94;
+    --color-brand-800: #125b79;
+    --color-brand-900: #144c66;
+    --color-brand-950: #0b3044;
+
+    /* Championship gold */
+    --color-gold-50: #fffbeb;
+    --color-gold-100: #fef3c7;
+    --color-gold-200: #fde68a;
+    --color-gold-300: #fcd34d;
+    --color-gold-400: #fbbf24;
+    --color-gold-500: #f59e0b;
+    --color-gold-600: #d97706;
+    --color-gold-700: #b45309;
+
+    /* Deep pitch navy */
+    --color-pitch-800: #0f1f33;
+    --color-pitch-900: #0a1626;
+    --color-pitch-950: #060e1a;
+
+    --color-accent: var(--color-brand-600);
+    --color-accent-content: var(--color-brand-600);
+    --color-accent-foreground: var(--color-white);
+}
+
+@layer theme {
+    .dark {
+        --color-accent: var(--color-brand-400);
+        --color-accent-content: var(--color-brand-300);
+        --color-accent-foreground: var(--color-pitch-950);
+    }
+}
+
+@utility font-display {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .vg-orb {
+        animation: vg-orb-float 9s ease-in-out infinite;
+    }
+}
+
+@keyframes vg-orb-float {
+    0%, 100% { transform: translateY(0) scale(1); opacity: 0.7; }
+    50% { transform: translateY(-24px) scale(1.12); opacity: 1; }
+}
+
+@layer base {
+
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentColor);
+    }
+}
+
+[data-flux-field]:not(ui-radio, ui-checkbox) {
+    @apply grid gap-2;
+}
+
+[data-flux-label] {
+    @apply  !mb-0 !leading-tight;
+}
+
+input:focus[data-flux-control],
+textarea:focus[data-flux-control],
+select:focus[data-flux-control] {
+    @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
+}
+
+/* \[:where(&)\]:size-4 {
+    @apply size-4;
+} */
