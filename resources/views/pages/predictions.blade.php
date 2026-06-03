@@ -31,15 +31,24 @@ new #[Title('Voorspellen')] class extends Component {
     }
 
     #[Computed]
+    public function groupLocksAt()
+    {
+        return $this->tournament?->groupStageLocksAt();
+    }
+
+    #[Computed]
     public function matches()
     {
+        $tournament = $this->tournament;
+
         return GameMatch::query()
-            ->when($this->tournament, fn ($q) => $q->where('tournament_id', $this->tournament->id))
+            ->when($tournament, fn ($q) => $q->where('tournament_id', $tournament->id))
             ->whereNotNull('kickoff_at')
             ->with(['homeTeam', 'awayTeam'])
             ->withCount('predictions')
             ->orderBy('kickoff_at')
             ->get()
+            ->each(fn (GameMatch $m) => $tournament && $m->setRelation('tournament', $tournament))
             ->groupBy(function (GameMatch $m) {
                 if ($m->status->isFinished()) {
                     return 'finished';
@@ -84,8 +93,24 @@ new #[Title('Voorspellen')] class extends Component {
 <div class="mx-auto w-full max-w-4xl space-y-8">
         <div>
             <flux:heading size="xl" class="font-display !text-3xl">Voorspellen</flux:heading>
-            <flux:text class="mt-1">Vul je uitslag in vóór de aftrap. Daarna sluit de wedstrijd automatisch.</flux:text>
+            <flux:text class="mt-1">De groepsfase sluit in één keer bij de aftrap van de eerste wedstrijd. Knockoutwedstrijden sluiten elk op hun eigen aftrap.</flux:text>
         </div>
+
+        {{-- Group stage deadline --}}
+        @if ($this->groupLocksAt)
+            <flux:card @class([
+                'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+                '!bg-zinc-50 dark:!bg-zinc-800/40' => $this->groupLocksAt->isPast(),
+            ])>
+                <div>
+                    <flux:heading class="font-display">Sluiting groepsfase</flux:heading>
+                    <flux:text class="!mt-0 text-sm">
+                        {{ $this->groupLocksAt->timezone('Europe/Amsterdam')->isoFormat('dddd D MMMM, HH:mm') }} — aftrap eerste wedstrijd.
+                    </flux:text>
+                </div>
+                <x-vg.countdown :until="$this->groupLocksAt" label="Nog te gaan" expired="Groepsfase gesloten" />
+            </flux:card>
+        @endif
 
         {{-- Open --}}
         <section class="space-y-3">
@@ -149,57 +174,29 @@ new #[Title('Voorspellen')] class extends Component {
             </section>
         @endif
 
-        {{-- Locked / live --}}
+        {{-- Locked / live — everyone's predictions, per match --}}
         @if (($this->matches['locked'] ?? collect())->isNotEmpty())
             <section class="space-y-3">
                 <flux:heading size="lg" class="font-display">Gesloten &amp; live</flux:heading>
                 <flux:text class="!mt-0 text-sm">Voorspellingen zijn nu zichtbaar voor iedereen.</flux:text>
 
                 @foreach ($this->matches['locked'] as $match)
-                    <flux:card class="space-y-3">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <x-vg.team-badge :team="$match->homeTeam" reverse />
-                                <flux:badge :color="$match->status->isLive() ? 'red' : 'zinc'" size="sm">{{ $match->status->label() }}</flux:badge>
-                                <x-vg.team-badge :team="$match->awayTeam" />
-                            </div>
-                            <flux:text class="text-xs">{{ $match->predictions_count }} voorspellingen</flux:text>
-                        </div>
-                        <flux:accordion>
-                            <flux:accordion.item heading="Bekijk alle voorspellingen">
-                                <div class="grid gap-1 sm:grid-cols-2">
-                                    @foreach (app(PredictionLockService::class)->visiblePredictions($match)->sortByDesc('user_id') as $p)
-                                        <div class="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-1.5 text-sm dark:bg-zinc-800/60">
-                                            <span class="truncate">{{ $p->user->name }}</span>
-                                            <span class="font-display font-semibold">{{ $p->home_score }}–{{ $p->away_score }}</span>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            </flux:accordion.item>
-                        </flux:accordion>
-                    </flux:card>
+                    <x-vg.match-predictions
+                        :match="$match"
+                        :predictions="app(PredictionLockService::class)->visiblePredictions($match)" />
                 @endforeach
             </section>
         @endif
 
-        {{-- Finished --}}
+        {{-- Finished — full overview with everyone's predictions and points --}}
         @if (($this->matches['finished'] ?? collect())->isNotEmpty())
             <section class="space-y-3">
                 <flux:heading size="lg" class="font-display">Afgelopen</flux:heading>
+                <flux:text class="!mt-0 text-sm">Goud = exact, groen = juiste uitkomst, grijs = mis.</flux:text>
                 @foreach ($this->matches['finished'] as $match)
-                    @php($pred = $this->scores[$match->id] ?? null)
-                    <flux:card class="flex items-center justify-between !py-3">
-                        <div class="flex items-center gap-3">
-                            <x-vg.team-badge :team="$match->homeTeam" reverse />
-                            <span class="font-display text-xl font-bold">{{ $match->home_score }}–{{ $match->away_score }}</span>
-                            <x-vg.team-badge :team="$match->awayTeam" />
-                        </div>
-                        @if ($pred)
-                            <span class="text-sm text-zinc-500">jouw voorspelling: <span class="font-semibold text-zinc-700 dark:text-zinc-200">{{ $pred['home'] }}–{{ $pred['away'] }}</span></span>
-                        @else
-                            <flux:badge color="zinc" size="sm">niet voorspeld</flux:badge>
-                        @endif
-                    </flux:card>
+                    <x-vg.match-predictions
+                        :match="$match"
+                        :predictions="app(PredictionLockService::class)->visiblePredictions($match)" />
                 @endforeach
             </section>
         @endif

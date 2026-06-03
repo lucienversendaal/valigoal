@@ -56,8 +56,10 @@ new #[Title('Bonusvragen')] class extends Component {
 
         $this->validate([
             'winnerTeamId' => ['nullable', 'integer', 'exists:teams,id'],
-            'finalistTeamId' => ['nullable', 'integer', 'exists:teams,id'],
+            'finalistTeamId' => ['nullable', 'integer', 'exists:teams,id', 'different:winnerTeamId'],
             'topScorer' => ['nullable', 'string', 'max:255'],
+        ], [
+            'finalistTeamId.different' => 'De finalist moet een ander land zijn dan de winnaar.',
         ]);
 
         $tournament = $this->tournament;
@@ -81,17 +83,27 @@ new #[Title('Bonusvragen')] class extends Component {
 <div class="mx-auto w-full max-w-2xl space-y-6">
         <div>
             <flux:heading size="xl" class="font-display !text-3xl">Bonusvragen</flux:heading>
-            <flux:text class="mt-1">Extra punten voor de grote voorspellingen. Deze sluiten bij de aftrap van het toernooi.</flux:text>
+            <flux:text class="mt-1">Extra punten voor de grote voorspellingen. Je kunt ze blijven wijzigen tot de aftrap van de eerste knockoutwedstrijd.</flux:text>
         </div>
 
         @if ($this->locked)
             <flux:callout variant="warning" icon="lock-closed" heading="De bonusvragen zijn gesloten">
-                Het toernooi is begonnen. Je inzendingen staan vast en worden na afloop verrekend.
+                De knockoutfase is begonnen. Je inzendingen staan vast en worden na afloop verrekend.
             </flux:callout>
         @else
-            <flux:callout variant="secondary" icon="clock">
-                Nog open tot {{ $this->tournament?->starts_at?->timezone('Europe/Amsterdam')->isoFormat('D MMMM, HH:mm') }}.
-            </flux:callout>
+            <flux:card class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <flux:heading class="font-display">Sluiting bonusvragen</flux:heading>
+                    <flux:text class="!mt-0 text-sm">
+                        @if ($this->tournament?->knockoutStartsAt())
+                            {{ $this->tournament->knockoutStartsAt()->timezone('Europe/Amsterdam')->isoFormat('dddd D MMMM, HH:mm') }} — eerste knockoutwedstrijd.
+                        @else
+                            Sluit bij de eerste knockoutwedstrijd (datum nog niet bekend).
+                        @endif
+                    </flux:text>
+                </div>
+                <x-vg.countdown :until="$this->tournament?->knockoutStartsAt()" label="Nog te gaan" expired="Bonusvragen gesloten" />
+            </flux:card>
         @endif
 
         <form wire:submit="save" class="space-y-5">
@@ -99,9 +111,11 @@ new #[Title('Bonusvragen')] class extends Component {
                 <div class="flex items-start gap-4">
                     <span class="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gold-400/15 text-gold-500"><x-icon-trophy class="size-5" /></span>
                     <div class="flex-1">
-                        <flux:select wire:model="winnerTeamId" :label="__('Toernooiwinnaar (15 punten)')" :disabled="$this->locked" placeholder="Kies een land">
+                        <flux:select wire:model.live="winnerTeamId" :label="__('Toernooiwinnaar (15 punten)')" :disabled="$this->locked" placeholder="Kies een land">
                             @foreach ($this->teams as $team)
-                                <flux:select.option :value="$team->id">{{ $team->name }}</flux:select.option>
+                                @if ($team->id !== $this->finalistTeamId)
+                                    <flux:select.option :value="$team->id">{{ $team->name }}</flux:select.option>
+                                @endif
                             @endforeach
                         </flux:select>
                     </div>
@@ -112,11 +126,14 @@ new #[Title('Bonusvragen')] class extends Component {
                 <div class="flex items-start gap-4">
                     <span class="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-600 dark:text-brand-300"><x-icon-ball class="size-5" /></span>
                     <div class="flex-1">
-                        <flux:select wire:model="finalistTeamId" :label="__('Finalist (10 punten)')" :disabled="$this->locked" placeholder="Kies een land">
+                        <flux:select wire:model.live="finalistTeamId" :label="__('Finalist (10 punten)')" :disabled="$this->locked" placeholder="Kies een land">
                             @foreach ($this->teams as $team)
-                                <flux:select.option :value="$team->id">{{ $team->name }}</flux:select.option>
+                                @if ($team->id !== $this->winnerTeamId)
+                                    <flux:select.option :value="$team->id">{{ $team->name }}</flux:select.option>
+                                @endif
                             @endforeach
                         </flux:select>
+                        @error('finalistTeamId') <flux:text class="mt-1 text-sm text-red-500">{{ $message }}</flux:text> @enderror
                     </div>
                 </div>
 

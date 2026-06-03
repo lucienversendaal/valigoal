@@ -35,17 +35,28 @@ new #[Title('Dashboard')] class extends Component {
     }
 
     #[Computed]
+    public function groupLocksAt()
+    {
+        return $this->tournament?->groupStageLocksAt();
+    }
+
+    #[Computed]
     public function openToPredict()
     {
+        $tournament = $this->tournament;
+
         return GameMatch::query()
-            ->when($this->tournament, fn ($q) => $q->where('tournament_id', $this->tournament->id))
+            ->when($tournament, fn ($q) => $q->where('tournament_id', $tournament->id))
             ->upcoming()
             ->whereNotNull('home_team_id')
             ->whereNotNull('away_team_id')
             ->whereDoesntHave('predictions', fn ($q) => $q->where('user_id', Auth::id()))
             ->with(['homeTeam', 'awayTeam'])
+            ->get()
+            ->each(fn (GameMatch $m) => $tournament && $m->setRelation('tournament', $tournament))
+            ->reject(fn (GameMatch $m) => $m->isLocked())
             ->take(4)
-            ->get();
+            ->values();
     }
 
     #[Computed]
@@ -86,8 +97,8 @@ new #[Title('Dashboard')] class extends Component {
                 </flux:heading>
                 <flux:text class="mt-1">
                     {{ $this->tournament?->name ?? 'Geen actief toernooi' }}
-                    @if ($this->tournament?->bonusesAreLocked() === false)
-                        · bonusvragen sluiten {{ $this->tournament->starts_at?->diffForHumans() }}
+                    @if ($this->tournament?->bonusesAreLocked() === false && $this->tournament?->knockoutStartsAt())
+                        · bonusvragen sluiten {{ $this->tournament->knockoutStartsAt()->diffForHumans() }}
                     @endif
                 </flux:text>
             </div>
@@ -95,6 +106,17 @@ new #[Title('Dashboard')] class extends Component {
                 Voorspellen
             </flux:button>
         </div>
+
+        {{-- Group stage countdown --}}
+        @if ($this->groupLocksAt && $this->groupLocksAt->isFuture())
+            <flux:card class="flex flex-col gap-3 border-brand-500/30 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <flux:heading class="font-display">Groepsfase sluit binnenkort</flux:heading>
+                    <flux:text class="!mt-0 text-sm">Vul je voorspellingen in vóór de aftrap van de eerste wedstrijd.</flux:text>
+                </div>
+                <x-vg.countdown :until="$this->groupLocksAt" label="Nog te gaan" expired="Groepsfase gesloten" />
+            </flux:card>
+        @endif
 
         {{-- Stat cards --}}
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -49,6 +49,7 @@ new class extends Component
             ->with(['homeTeam', 'awayTeam', 'predictions' => fn ($q) => $q->where('user_id', Auth::id())])
             ->orderBy('kickoff_at')
             ->get()
+            ->each(fn (GameMatch $m) => $m->setRelation('tournament', $this->tournament))
             ->filter(fn (GameMatch $m) => $m->groupLetter() === $this->group)
             ->values();
     }

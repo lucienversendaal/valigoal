@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MatchStatus;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GameMatch extends Model
 {
+    /** football-data.org stage value for the group phase. */
+    public const GROUP_STAGE = 'GROUP_STAGE';
+
     protected $table = 'matches';
 
     protected $guarded = [];
@@ -76,9 +80,29 @@ class GameMatch extends Model
         return $letters !== '' ? strtoupper(substr($letters, -1)) : null;
     }
 
+    public function isGroupStage(): bool
+    {
+        return $this->stage === self::GROUP_STAGE;
+    }
+
+    /**
+     * The moment this match locks. Group matches all lock together at the
+     * start of the group phase; knockout matches lock at their own kickoff.
+     */
+    public function locksAt(): ?CarbonInterface
+    {
+        if ($this->isGroupStage()) {
+            return $this->tournament?->groupStageLocksAt();
+        }
+
+        return $this->kickoff_at;
+    }
+
     public function isLocked(): bool
     {
-        return $this->kickoff_at !== null && $this->kickoff_at->isPast();
+        $locksAt = $this->locksAt();
+
+        return $locksAt !== null && $locksAt->isPast();
     }
 
     public function isOpen(): bool
