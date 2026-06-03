@@ -85,7 +85,7 @@ class HistoricalFactSeeder extends Seeder
                 'sort_order' => 1,
             ],
             [
-                'title' => 'Frankrijk 3 - 3 Argentinië',
+                'title' => 'Frankrijk 4 - 3 Argentinië',
                 'subtitle' => 'Achtste finale, 2018',
                 'year' => 2018,
                 'body' => 'Mbappé barstte los op het wereldtoneel in een waanzinnige zevenklapper.',

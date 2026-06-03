@@ -119,26 +119,13 @@ class DemoTournamentSeeder extends Seeder
             );
 
             // Iedereen voorspelt elke groepswedstrijd. Op gespeelde wedstrijden
-            // variëren we zodat de punten (en kleuren) mooi spreiden.
+            // verdelen we de voorspellingen over vier archetypes zodat elke
+            // wedstrijd alle puntenwaarden laat zien: 5 (exact), 4 (juiste
+            // uitkomst + één team exact goed), 3 (juiste uitkomst) en 0 (mis).
             foreach ($participants as $pi => $participant) {
-                if ($finished) {
-                    $offset = ($pi + $i) % 4;
-                    $predHome = match ($offset) {
-                        0 => $hs,                 // exact
-                        1 => $hs + 1,             // vaak juiste uitkomst
-                        2 => max(0, $hs - 1),
-                        default => $as,           // vaak mis
-                    };
-                    $predAway = match ($offset) {
-                        0 => $as,
-                        1 => $as,
-                        2 => $as + 1,
-                        default => $hs,
-                    };
-                } else {
-                    $predHome = ($pi + $i) % 3;
-                    $predAway = ($pi * 2 + $i) % 3;
-                }
+                [$predHome, $predAway] = $finished
+                    ? $this->craftPrediction(($pi + $i) % 4, $hs, $as)
+                    : [($pi + $i) % 3, ($pi * 2 + $i) % 3];
 
                 Prediction::updateOrCreate(
                     ['user_id' => $participant->id, 'match_id' => $match->id],
@@ -190,5 +177,30 @@ class DemoTournamentSeeder extends Seeder
                 ['player_name' => ['Mbappé', 'Haaland', 'Messi', 'Vinícius Jr', 'Kane'][$pi % 5]],
             );
         }
+    }
+
+    /**
+     * Bouw een voorspelling die een bepaalde puntenwaarde oplevert tegen de
+     * uitslag $hs–$as, volgens de actieve scoringsregel:
+     *   0 → exacte uitslag (5)
+     *   1 → juiste uitkomst + één team exact goed (4); bij gelijkspel niet
+     *       mogelijk, dan valt het terug op 3
+     *   2 → juiste uitkomst, geen team exact goed (3)
+     *   3 → verkeerde uitkomst (0)
+     *
+     * @return array{0: int, 1: int} [thuisscore, uitscore]
+     */
+    private function craftPrediction(int $archetype, int $hs, int $as): array
+    {
+        return match ($archetype) {
+            0 => [$hs, $as],
+            1 => match (true) {
+                $hs > $as => [$hs + 1, $as], // thuiswinst: uitploeg exact goed
+                $hs < $as => [$hs, $as + 1], // uitwinst: thuisploeg exact goed
+                default => [$hs + 1, $as + 1], // gelijkspel: +1 niet mogelijk
+            },
+            2 => [$hs + 1, $as + 1],
+            default => [$as, $hs + 1],
+        };
     }
 }
