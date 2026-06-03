@@ -15,13 +15,32 @@ use Illuminate\Database\Seeder;
 
 class DemoTournamentSeeder extends Seeder
 {
+    /**
+     * Demo timeline toggle.
+     *
+     * true  → de groepsfase is al begonnen. Je ziet het volledige overzicht
+     *         "wie heeft wat voorspeld" per wedstrijd (ingekleurd op punten),
+     *         de groepsklok staat op "gesloten" en de bonusklok telt live af
+     *         naar de eerste knockoutwedstrijd.
+     * false → de groepsfase moet nog beginnen. De groepsklok telt live af,
+     *         de invulvelden staan open en alle voorspellingen blijven geheim
+     *         tot de deadline. De bonusklok telt eveneens live af.
+     */
+    private bool $groupStarted = true;
+
     public function run(ScoreCalculationService $scoring): void
     {
+        // Kickoff van de allereerste groepswedstrijd = de sluiting van de hele
+        // groepsfase. Alle andere groepswedstrijden liggen hierna.
+        $anchor = $this->groupStarted
+            ? now()->subDays(2)->setTime(18, 0)
+            : now()->addHours(20)->startOfHour();
+
         $tournament = Tournament::updateOrCreate(
             ['code' => 'WC', 'season' => '2026'],
             [
                 'name' => 'FIFA WK 2026',
-                'starts_at' => now()->addHours(36),
+                'starts_at' => $anchor,
                 'ends_at' => now()->addDays(40),
                 'is_active' => true,
             ],
@@ -47,58 +66,6 @@ class DemoTournamentSeeder extends Seeder
             ),
         ]);
 
-        // Finished matches (already played) with results.
-        $finished = [
-            ['NED', 'MEX', 3, 1, -6],
-            ['BRA', 'CRO', 1, 1, -5],
-            ['ARG', 'USA', 2, 0, -4],
-            ['FRA', 'BEL', 2, 1, -3],
-            ['GER', 'POR', 0, 2, -2],
-            ['ESP', 'ENG', 1, 0, -1],
-        ];
-
-        $finishedModels = [];
-        foreach ($finished as $i => [$home, $away, $hs, $as, $daysAgo]) {
-            $finishedModels[] = GameMatch::updateOrCreate(
-                ['tournament_id' => $tournament->id, 'home_team_id' => $teams[$home]->id, 'away_team_id' => $teams[$away]->id, 'matchday' => 1],
-                [
-                    'stage' => 'GROUP_STAGE',
-                    'group' => 'Groep '.chr(65 + ($i % 4)),
-                    'kickoff_at' => now()->addDays($daysAgo),
-                    'status' => 'FINISHED',
-                    'home_score' => $hs,
-                    'away_score' => $as,
-                    'winner' => $hs > $as ? 'HOME_TEAM' : ($hs < $as ? 'AWAY_TEAM' : 'DRAW'),
-                    'finished_at' => now()->addDays($daysAgo)->addHours(2),
-                    'points_awarded' => false,
-                ],
-            );
-        }
-
-        // Upcoming matches, still open for predictions.
-        $upcoming = [
-            ['NED', 'GER', 1],
-            ['BRA', 'ARG', 2],
-            ['FRA', 'ESP', 2],
-            ['ENG', 'POR', 3],
-            ['BEL', 'CRO', 4],
-            ['MEX', 'USA', 4],
-            ['NED', 'BRA', 6],
-            ['ARG', 'FRA', 7],
-        ];
-
-        foreach ($upcoming as $i => [$home, $away, $daysAhead]) {
-            GameMatch::updateOrCreate(
-                ['tournament_id' => $tournament->id, 'home_team_id' => $teams[$home]->id, 'away_team_id' => $teams[$away]->id, 'matchday' => 2],
-                [
-                    'stage' => 'GROUP_STAGE',
-                    'group' => 'Groep '.chr(65 + ($i % 4)),
-                    'kickoff_at' => now()->addDays($daysAhead)->setTime(20, 0),
-                    'status' => 'TIMED',
-                ],
-            );
-        }
-
         // Demo participants.
         $names = ['Sanne de Vries', 'Daan Jansen', 'Eva Bakker', 'Tom Visser', 'Lotte Smit', 'Bram Mulder', 'Femke Bos'];
         $participants = collect($names)->map(fn ($name, $i) => User::updateOrCreate(
@@ -110,23 +77,68 @@ class DemoTournamentSeeder extends Seeder
         if ($admin) {
             $participants->push($admin);
         }
+        $participants = $participants->values();
 
-        // Predictions on finished matches (varied so points spread out).
-        foreach ($finishedModels as $mi => $match) {
-            foreach ($participants->values() as $pi => $participant) {
-                $offset = ($pi + $mi) % 4;
-                $predHome = match ($offset) {
-                    0 => $match->home_score,        // exact
-                    1 => $match->home_score + 1,    // maybe outcome
-                    2 => max(0, $match->home_score - 1),
-                    default => $match->away_score,  // often wrong
-                };
-                $predAway = match ($offset) {
-                    0 => $match->away_score,
-                    1 => $match->away_score,
-                    2 => $match->away_score + 1,
-                    default => $match->home_score,
-                };
+        // Group fixtures: [home, away, group, +uren na anchor, thuis, uit].
+        // De uitslag wordt alleen gebruikt als de wedstrijd in het verleden ligt.
+        $groupFixtures = [
+            // Speelronde 1 — rond de anchor (eerste wedstrijd = de deadline).
+            ['NED', 'MEX', 'A', 0, 3, 1],
+            ['BRA', 'CRO', 'B', 3, 1, 1],
+            ['ARG', 'USA', 'C', 24, 2, 0],
+            ['FRA', 'BEL', 'D', 27, 2, 1],
+            ['GER', 'POR', 'A', 30, 0, 2],
+            ['ESP', 'ENG', 'B', 48, 1, 0],
+            // Speelronde 2 — enkele dagen later, nog steeds groepsfase.
+            ['NED', 'GER', 'A', 96, 2, 2],
+            ['BRA', 'ARG', 'B', 99, 1, 0],
+            ['FRA', 'ESP', 'D', 102, 1, 1],
+            ['ENG', 'POR', 'B', 120, 0, 0],
+            ['BEL', 'CRO', 'D', 123, 2, 1],
+            ['MEX', 'USA', 'C', 126, 0, 3],
+        ];
+
+        foreach ($groupFixtures as $i => [$home, $away, $group, $hours, $hs, $as]) {
+            $kickoff = $anchor->copy()->addHours($hours);
+            $matchday = $i < 6 ? 1 : 2;
+            $finished = $kickoff->isPast();
+
+            $match = GameMatch::updateOrCreate(
+                ['tournament_id' => $tournament->id, 'home_team_id' => $teams[$home]->id, 'away_team_id' => $teams[$away]->id, 'matchday' => $matchday],
+                [
+                    'stage' => 'GROUP_STAGE',
+                    'group' => 'Groep '.$group,
+                    'kickoff_at' => $kickoff,
+                    'status' => $finished ? 'FINISHED' : 'TIMED',
+                    'home_score' => $finished ? $hs : null,
+                    'away_score' => $finished ? $as : null,
+                    'winner' => $finished ? ($hs > $as ? 'HOME_TEAM' : ($hs < $as ? 'AWAY_TEAM' : 'DRAW')) : null,
+                    'finished_at' => $finished ? $kickoff->copy()->addHours(2) : null,
+                    'points_awarded' => false,
+                ],
+            );
+
+            // Iedereen voorspelt elke groepswedstrijd. Op gespeelde wedstrijden
+            // variëren we zodat de punten (en kleuren) mooi spreiden.
+            foreach ($participants as $pi => $participant) {
+                if ($finished) {
+                    $offset = ($pi + $i) % 4;
+                    $predHome = match ($offset) {
+                        0 => $hs,                 // exact
+                        1 => $hs + 1,             // vaak juiste uitkomst
+                        2 => max(0, $hs - 1),
+                        default => $as,           // vaak mis
+                    };
+                    $predAway = match ($offset) {
+                        0 => $as,
+                        1 => $as,
+                        2 => $as + 1,
+                        default => $hs,
+                    };
+                } else {
+                    $predHome = ($pi + $i) % 3;
+                    $predAway = ($pi * 2 + $i) % 3;
+                }
 
                 Prediction::updateOrCreate(
                     ['user_id' => $participant->id, 'match_id' => $match->id],
@@ -134,23 +146,37 @@ class DemoTournamentSeeder extends Seeder
                 );
             }
 
-            $scoring->awardMatch($match->fresh());
-        }
-
-        // A few predictions on the first upcoming match (kept secret until kickoff).
-        $firstUpcoming = GameMatch::where('tournament_id', $tournament->id)->where('matchday', 2)->orderBy('kickoff_at')->first();
-        if ($firstUpcoming) {
-            foreach ($participants->take(4)->values() as $pi => $participant) {
-                Prediction::updateOrCreate(
-                    ['user_id' => $participant->id, 'match_id' => $firstUpcoming->id],
-                    ['home_score' => 2, 'away_score' => $pi % 2],
-                );
+            if ($finished) {
+                $scoring->awardMatch($match->fresh());
             }
         }
 
-        // Bonus predictions (open while tournament hasn't started).
+        // Knockoutwedstrijden — altijd in de toekomst, teams nog te loten.
+        // De vroegste hiervan bepaalt de sluiting van de bonusvragen.
+        $knockout = [
+            ['LAST_16', 8, 10],
+            ['QUARTER_FINALS', 11, 11],
+            ['SEMI_FINALS', 14, 12],
+            ['FINAL', 17, 13],
+        ];
+
+        foreach ($knockout as [$stage, $daysAhead, $matchday]) {
+            GameMatch::updateOrCreate(
+                ['tournament_id' => $tournament->id, 'stage' => $stage, 'matchday' => $matchday],
+                [
+                    'home_team_id' => null,
+                    'away_team_id' => null,
+                    'group' => null,
+                    'kickoff_at' => now()->addDays($daysAhead)->setTime(20, 0),
+                    'status' => 'TIMED',
+                ],
+            );
+        }
+
+        // Bonusvoorspellingen — open tot de eerste knockoutwedstrijd.
+        // Winnaar en finalist zijn bewust altijd verschillende landen.
         $bonusTeams = ['BRA', 'FRA', 'ARG', 'NED', 'ESP', 'GER', 'POR'];
-        foreach ($participants->values() as $pi => $participant) {
+        foreach ($participants as $pi => $participant) {
             BonusPrediction::updateOrCreate(
                 ['user_id' => $participant->id, 'tournament_id' => $tournament->id, 'type' => BonusType::Winner->value],
                 ['team_id' => $teams[$bonusTeams[$pi % count($bonusTeams)]]->id],

@@ -8,6 +8,6 @@ class ScoreResult
         public int $points,
         public bool $isExact,
         public bool $isCorrectOutcome,
-        public bool $isCorrectGoalDifference,
+        public bool $isCorrectTeamScore,
     ) {}
 }

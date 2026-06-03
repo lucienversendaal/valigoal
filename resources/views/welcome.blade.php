@@ -110,12 +110,12 @@
                     <x-feature-card title="Voorspel wedstrijden" accent="brand">
                         <x-slot:icon><x-icon-ball class="size-6" /></x-slot:icon>
                         Vul vóór de aftrap je uitslag in. <strong class="text-white">5 punten</strong> voor de exacte score,
-                        <strong class="text-white">3</strong> voor de juiste uitkomst en <strong class="text-white">+1</strong> voor het juiste doelsaldo.
+                        <strong class="text-white">3</strong> voor de juiste uitkomst en <strong class="text-white">+1</strong> als je het aantal goals van één team precies goed hebt.
                     </x-feature-card>
                     <x-feature-card title="Bonusvragen" accent="gold">
                         <x-slot:icon><x-icon-trophy class="size-6" /></x-slot:icon>
                         Raad de <strong class="text-white">winnaar (15)</strong>, de <strong class="text-white">finalist (10)</strong>
-                        en de <strong class="text-white">topscorer (10)</strong>. Sluit bij de aftrap van het toernooi.
+                        en de <strong class="text-white">topscorer (10)</strong>. Wijzigbaar tot de eerste knockoutwedstrijd.
                     </x-feature-card>
                     <x-feature-card title="Klassement" accent="brand">
                         <x-slot:icon><x-icon-chart class="size-6" /></x-slot:icon>

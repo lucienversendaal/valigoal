@@ -17,7 +17,7 @@ class Prediction extends Model
             'points' => 'integer',
             'is_exact' => 'boolean',
             'is_correct_outcome' => 'boolean',
-            'is_correct_goal_difference' => 'boolean',
+            'is_correct_team_score' => 'boolean',
             'locked_at' => 'datetime',
         ];
     }

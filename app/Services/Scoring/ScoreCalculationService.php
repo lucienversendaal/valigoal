@@ -11,32 +11,36 @@ use Illuminate\Support\Str;
 
 class ScoreCalculationService
 {
-    public const POINTS_EXACT = 5;
+    public const int POINTS_EXACT = 5;
 
-    public const POINTS_OUTCOME = 3;
+    public const int POINTS_OUTCOME = 3;
 
-    public const POINTS_GOAL_DIFFERENCE = 1;
+    public const int POINTS_TEAM_SCORE = 1;
 
     /**
      * Score a single prediction against the actual result.
+     *
+     * - Exacte uitslag: 5 punten.
+     * - Juiste uitkomst (winst/gelijk/verlies): 3 punten.
+     * - +1 bonuspunt als je dáárbovenop het exacte aantal goals van minstens
+     *   één team goed had (thuis óf uit). Bij een exacte uitslag zit dit al in
+     *   de 5 punten.
      */
     public function score(int $predHome, int $predAway, int $actualHome, int $actualAway): ScoreResult
     {
         $isExact = $predHome === $actualHome && $predAway === $actualAway;
 
-        $predDiff = $predHome - $predAway;
-        $actualDiff = $actualHome - $actualAway;
+        $isCorrectOutcome = $this->sign($predHome - $predAway) === $this->sign($actualHome - $actualAway);
 
-        $isCorrectOutcome = $this->sign($predDiff) === $this->sign($actualDiff);
-        $isCorrectGoalDifference = $predDiff === $actualDiff;
+        $isCorrectTeamScore = $predHome === $actualHome || $predAway === $actualAway;
 
         $points = match (true) {
             $isExact => self::POINTS_EXACT,
-            $isCorrectOutcome => self::POINTS_OUTCOME + ($isCorrectGoalDifference ? self::POINTS_GOAL_DIFFERENCE : 0),
+            $isCorrectOutcome => self::POINTS_OUTCOME + ($isCorrectTeamScore ? self::POINTS_TEAM_SCORE : 0),
             default => 0,
         };
 
-        return new ScoreResult($points, $isExact, $isCorrectOutcome, $isCorrectGoalDifference);
+        return new ScoreResult($points, $isExact, $isCorrectOutcome, $isCorrectTeamScore);
     }
 
     /**
@@ -61,7 +65,7 @@ class ScoreCalculationService
                     'points' => $result->points,
                     'is_exact' => $result->isExact,
                     'is_correct_outcome' => $result->isCorrectOutcome,
-                    'is_correct_goal_difference' => $result->isCorrectGoalDifference,
+                    'is_correct_team_score' => $result->isCorrectTeamScore,
                 ])->save();
             });
 
