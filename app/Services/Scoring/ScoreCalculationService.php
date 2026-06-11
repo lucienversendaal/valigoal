@@ -74,6 +74,56 @@ class ScoreCalculationService
     }
 
     /**
+     * Re-score every finished match of a tournament, ignoring the
+     * `points_awarded` guard. Use after a result was corrected.
+     *
+     * @return int Number of matches (re)scored.
+     */
+    public function recalculateMatches(Tournament $tournament): int
+    {
+        $count = 0;
+
+        $tournament->matches()->get()->each(function (GameMatch $match) use (&$count) {
+            if ($match->hasResult()) {
+                $this->awardMatch($match);
+                $count++;
+            }
+        });
+
+        return $count;
+    }
+
+    /**
+     * Derive winner and runner-up from the final and persist them on the
+     * tournament. Returns true once a winner could be resolved.
+     */
+    public function resolveFinalOutcome(Tournament $tournament): bool
+    {
+        $final = $tournament->matches()->where('stage', 'FINAL')->first();
+
+        if (! $final || ! $final->hasResult()) {
+            return false;
+        }
+
+        [$winner, $runnerUp] = match ($final->winner) {
+            'HOME_TEAM' => [$final->home_team_id, $final->away_team_id],
+            'AWAY_TEAM' => [$final->away_team_id, $final->home_team_id],
+            default => [null, null], // draw/penalties without a decided winner
+        };
+
+        if (! $winner) {
+            return false;
+        }
+
+        $tournament->forceFill([
+            'winner_team_id' => $winner,
+            'runner_up_team_id' => $runnerUp,
+        ])->save();
+
+        return true;
+    }
+
+    /**
      * Award bonus points once the tournament outcome is known.
      */
     public function awardBonuses(Tournament $tournament): int

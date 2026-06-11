@@ -157,18 +157,56 @@ class FootballDataSync
     public function syncResults(Tournament $tournament): array
     {
         $matches = $this->client->matches(['status' => 'FINISHED'])['matches'] ?? [];
-        $scored = 0;
 
         foreach ($matches as $match) {
-            $model = $this->upsertMatch($tournament, $match);
-
-            if ($model->hasResult() && ! $model->points_awarded) {
-                $this->scoring->awardMatch($model);
-                $scored++;
-            }
+            $this->upsertMatch($tournament, $match);
         }
 
+        // Score every finished match that still owes points, regardless of which
+        // sync populated the result. football-data's FINISHED filter is flaky, so
+        // a score can arrive via the fixtures sync without this endpoint listing it.
+        $scored = $this->awardPendingMatches($tournament);
+
         return ['updated' => count($matches), 'scored' => $scored];
+    }
+
+    /**
+     * Award points to any finished match of the tournament that hasn't been
+     * scored yet.
+     *
+     * @return int Number of matches scored.
+     */
+    public function awardPendingMatches(Tournament $tournament): int
+    {
+        $scored = 0;
+
+        $tournament->matches()
+            ->where('points_awarded', false)
+            ->get()
+            ->each(function (GameMatch $match) use (&$scored) {
+                if ($match->hasResult()) {
+                    $this->scoring->awardMatch($match);
+                    $scored++;
+                }
+            });
+
+        return $scored;
+    }
+
+    /**
+     * Resolve the final's winner and, once both the winner and the top scorer
+     * are known, award the tournament bonus points. Returns the number of
+     * correct bonuses, or null when the outcome isn't complete yet.
+     */
+    public function finalizeBonuses(Tournament $tournament): ?int
+    {
+        $this->scoring->resolveFinalOutcome($tournament);
+
+        if (! $tournament->winner_team_id || ! $tournament->top_scorer_name) {
+            return null;
+        }
+
+        return $this->scoring->awardBonuses($tournament);
     }
 
     /**
@@ -178,8 +216,25 @@ class FootballDataSync
     {
         $homeId = $this->resolveTeamId($tournament, $match['homeTeam'] ?? []);
         $awayId = $this->resolveTeamId($tournament, $match['awayTeam'] ?? []);
+        $existing = GameMatch::where('external_id', $match['id'])->first();
+
         $fullTime = $match['score']['fullTime'] ?? [];
+        $incomingHasScore = isset($fullTime['home'], $fullTime['away']);
+
+        // football-data occasionally returns a match without its fullTime score
+        // (e.g. it flags the opening game as FINISHED before publishing the result).
+        // Keep any score we already stored rather than wiping it back to null.
+        $homeScore = $incomingHasScore ? $fullTime['home'] : $existing?->home_score;
+        $awayScore = $incomingHasScore ? $fullTime['away'] : $existing?->away_score;
+        $winner = $incomingHasScore ? ($match['score']['winner'] ?? null) : $existing?->winner;
+
         $status = $match['status'] ?? 'SCHEDULED';
+
+        // Don't record a match as FINISHED until we actually have a result, so it
+        // isn't shown as played (and skipped by scoring) without a score.
+        if ($status === 'FINISHED' && ($homeScore === null || $awayScore === null)) {
+            $status = 'TIMED';
+        }
 
         return GameMatch::updateOrCreate(
             ['external_id' => $match['id']],
@@ -192,10 +247,10 @@ class FootballDataSync
                 'matchday' => $match['matchday'] ?? null,
                 'kickoff_at' => isset($match['utcDate']) ? Carbon::parse($match['utcDate']) : null,
                 'status' => $status,
-                'home_score' => $fullTime['home'] ?? null,
-                'away_score' => $fullTime['away'] ?? null,
-                'winner' => $match['score']['winner'] ?? null,
-                'finished_at' => $status === 'FINISHED' ? now() : null,
+                'home_score' => $homeScore,
+                'away_score' => $awayScore,
+                'winner' => $winner,
+                'finished_at' => $status === 'FINISHED' ? ($existing?->finished_at ?? now()) : null,
                 'last_synced_at' => now(),
             ],
         );

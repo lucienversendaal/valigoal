@@ -6,6 +6,8 @@ use App\Filament\Resources\ApiSyncLogs\ApiSyncLogResource;
 use App\Jobs\SyncFixturesJob;
 use App\Jobs\SyncOddsJob;
 use App\Jobs\SyncResultsJob;
+use App\Models\Tournament;
+use App\Services\Scoring\ScoreCalculationService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
@@ -46,6 +48,32 @@ class ListApiSyncLogs extends ListRecords
                     Notification::make()
                         ->title('Odds-synchronisatie gestart')
                         ->body('De odds-sync is in de wachtrij geplaatst. Ververs zo de lijst.')
+                        ->success()
+                        ->send();
+                }),
+            Action::make('recalculateScores')
+                ->label('Scores herberekenen')
+                ->icon('heroicon-o-calculator')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalDescription('Berekent de punten van álle voltooide wedstrijden opnieuw op basis van de huidige eindstanden. Handig na een gecorrigeerde uitslag.')
+                ->action(function () {
+                    $tournament = Tournament::where('is_active', true)->first();
+
+                    if (! $tournament) {
+                        Notification::make()
+                            ->title('Geen actief toernooi')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    $scored = app(ScoreCalculationService::class)->recalculateMatches($tournament);
+
+                    Notification::make()
+                        ->title('Scores herberekend')
+                        ->body("{$scored} voltooide wedstrijd(en) opnieuw gescoord.")
                         ->success()
                         ->send();
                 }),

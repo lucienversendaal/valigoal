@@ -28,14 +28,19 @@ class SyncResultsJob implements ShouldQueue
         try {
             $result = $sync->syncResults($tournament);
             $scorers = $sync->syncScorers($tournament);
+            $bonuses = $sync->finalizeBonuses($tournament);
+
+            $bonusMessage = $bonuses === null
+                ? 'bonussen nog niet toegekend (winnaar/topscorer onbekend)'
+                : "{$bonuses} bonussen goed gerekend";
 
             ApiSyncLog::create([
                 'type' => 'results',
                 'status' => 'success',
                 'endpoint' => 'competitions/{code}/matches?status=FINISHED',
                 'items_processed' => $result['updated'],
-                'message' => "{$result['updated']} eindstanden verwerkt, {$result['scored']} wedstrijden gescoord, {$scorers} topscorers bijgewerkt.",
-                'context' => $result + ['scorers' => $scorers],
+                'message' => "{$result['updated']} eindstanden verwerkt, {$result['scored']} wedstrijden gescoord, {$scorers} topscorers bijgewerkt, {$bonusMessage}.",
+                'context' => $result + ['scorers' => $scorers, 'bonuses' => $bonuses],
                 'duration_ms' => $this->elapsed($start),
                 'triggered_manually' => $this->manual,
             ]);

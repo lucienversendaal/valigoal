@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Tournaments\Tables;
 
+use App\Filament\Resources\Tournaments\Actions\ScoringActions;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -59,6 +61,10 @@ class TournamentsTable
             ])
             ->recordActions([
                 EditAction::make(),
+                ActionGroup::make(ScoringActions::all())
+                    ->label('Berekeningen')
+                    ->icon('heroicon-o-calculator')
+                    ->button(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
