@@ -21,5 +21,6 @@ Schedule::job(new SyncResultsJob)->everyThirtyMinutes();
 // Refresh 1X2 odds a few times a day (The Odds API free tier is request-limited).
 Schedule::job(new SyncOddsJob)->everySixHours();
 
-// Remind participants who still owe a prediction (24h + 2h before kickoff).
+// Announce newly opened knockout rounds and remind participants who still owe
+// predictions, 24h + 2h before each round's deadline (its first kickoff).
 Schedule::command('predictions:remind')->hourly()->withoutOverlapping();

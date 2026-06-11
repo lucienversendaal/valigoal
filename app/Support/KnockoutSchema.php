@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use App\Models\GameMatch;
+use Illuminate\Support\Str;
+
 /**
  * Official FIFA World Cup 2026 knockout bracket template.
  *
@@ -18,6 +21,59 @@ class KnockoutSchema
     public static function forStage(string $stage): array
     {
         return self::all()[$stage] ?? [];
+    }
+
+    /**
+     * Knockout stages in chronological order.
+     *
+     * @return array<int, string>
+     */
+    public static function knockoutStages(): array
+    {
+        return array_keys(self::all());
+    }
+
+    /**
+     * Every prediction round in chronological order, group stage first.
+     *
+     * @return array<int, string>
+     */
+    public static function reminderStages(): array
+    {
+        return [GameMatch::GROUP_STAGE, ...self::knockoutStages()];
+    }
+
+    /**
+     * The round whose results unlock the given stage for predictions. Returns
+     * null for stages that have no predecessor (i.e. the group stage).
+     */
+    public static function predecessor(string $stage): ?string
+    {
+        return match ($stage) {
+            'LAST_32' => GameMatch::GROUP_STAGE,
+            'LAST_16' => 'LAST_32',
+            'QUARTER_FINALS' => 'LAST_16',
+            'SEMI_FINALS' => 'QUARTER_FINALS',
+            'THIRD_PLACE', 'FINAL' => 'SEMI_FINALS',
+            default => null,
+        };
+    }
+
+    /**
+     * Human-readable Dutch label for a stage, used in e-mails.
+     */
+    public static function label(string $stage): string
+    {
+        return match ($stage) {
+            GameMatch::GROUP_STAGE => 'groepsfase',
+            'LAST_32' => 'Last 32',
+            'LAST_16' => 'achtste finales',
+            'QUARTER_FINALS' => 'kwartfinales',
+            'SEMI_FINALS' => 'halve finales',
+            'THIRD_PLACE' => 'troostfinale',
+            'FINAL' => 'finale',
+            default => Str::headline(strtolower($stage)),
+        };
     }
 
     /**

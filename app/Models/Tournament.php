@@ -87,6 +87,27 @@ class Tournament extends Model
     }
 
     /**
+     * The moment a round starts closing: the kickoff of its earliest match.
+     * Group matches all lock here at once; knockout matches lock at their own
+     * kickoff, but this is still the deadline we anchor round reminders to.
+     */
+    public function roundDeadline(string $stage): ?Carbon
+    {
+        return $this->deadlineCache['round:'.$stage] ??= $this->earliestKickoff([$stage], exclude: false);
+    }
+
+    /**
+     * Whether every match in a round has a final result. Used to decide when
+     * the next round can be announced as open for predictions.
+     */
+    public function roundIsFullyPlayed(string $stage): bool
+    {
+        $matches = $this->matches()->where('stage', $stage)->get();
+
+        return $matches->isNotEmpty() && $matches->every->hasResult();
+    }
+
+    /**
      * Earliest kickoff among matches of (or excluding) the given stages.
      *
      * @param  array<int, string>  $stages
