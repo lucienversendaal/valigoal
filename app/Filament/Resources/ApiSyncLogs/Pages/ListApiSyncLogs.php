@@ -34,6 +34,21 @@ class ListApiSyncLogs extends ListRecords
                         ->success()
                         ->send();
                 }),
+            Action::make('syncOdds')
+                ->label('Sync odds')
+                ->icon('heroicon-o-currency-euro')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalDescription('Haalt alleen de odds op bij de odds-provider.')
+                ->action(function () {
+                    SyncOddsJob::dispatch(manual: true);
+
+                    Notification::make()
+                        ->title('Odds-synchronisatie gestart')
+                        ->body('De odds-sync is in de wachtrij geplaatst. Ververs zo de lijst.')
+                        ->success()
+                        ->send();
+                }),
         ];
     }
 }
