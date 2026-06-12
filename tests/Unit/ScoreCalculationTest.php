@@ -66,12 +66,35 @@ class ScoreCalculationTest extends TestCase
         $this->assertFalse($result->isCorrectTeamScore);
     }
 
-    public function test_matching_a_team_score_without_correct_outcome_scores_nothing(): void
+    public function test_matching_a_team_score_without_correct_outcome_scores_one_point(): void
     {
-        // Predict 1-1, actual 3-1: away tally matches but the outcome is wrong.
+        // Predict 1-1, actual 3-1: away tally matches even though the outcome
+        // is wrong. The single correct team score still earns 1 point.
         $result = $this->service->score(1, 1, 3, 1);
 
+        $this->assertSame(1, $result->points);
+        $this->assertFalse($result->isCorrectOutcome);
+        $this->assertTrue($result->isCorrectTeamScore);
+    }
+
+    public function test_wrong_outcome_with_no_matching_team_score_is_zero_points(): void
+    {
+        // Predict 1-1, actual 3-2: outcome wrong and neither tally matches.
+        $result = $this->service->score(1, 1, 3, 2);
+
         $this->assertSame(0, $result->points);
+        $this->assertFalse($result->isCorrectOutcome);
+        $this->assertFalse($result->isCorrectTeamScore);
+    }
+
+    public function test_matching_the_home_team_score_without_correct_outcome_scores_one_point(): void
+    {
+        // Predict 2-2, actual 2-1: the home tally matches (2 == 2) even though
+        // the outcome is wrong, so it still earns 1 point. This is the Kim
+        // Roeleveld case.
+        $result = $this->service->score(2, 2, 2, 1);
+
+        $this->assertSame(1, $result->points);
         $this->assertFalse($result->isCorrectOutcome);
         $this->assertTrue($result->isCorrectTeamScore);
     }

@@ -22,9 +22,12 @@ class ScoreCalculationService
      *
      * - Exacte uitslag: 5 punten.
      * - Juiste uitkomst (winst/gelijk/verlies): 3 punten.
-     * - +1 bonuspunt als je dáárbovenop het exacte aantal goals van minstens
-     *   één team goed had (thuis óf uit). Bij een exacte uitslag zit dit al in
-     *   de 5 punten.
+     * - +1 punt als je het exacte aantal goals van minstens één team goed had
+     *   (thuis óf uit). Dit telt óók als de uitkomst fout is: voorspel je 1-1
+     *   terwijl het 2-1 wordt, dan klopt het uitdoelpunt (1) en krijg je +1;
+     *   voorspel je 2-2, dan klopt het thuisdoelpunt (2) en krijg je óók +1.
+     *   Bovenop een juiste uitkomst is het een bonus; bij een exacte uitslag
+     *   zit het al in de 5 punten.
      */
     public function score(int $predHome, int $predAway, int $actualHome, int $actualAway): ScoreResult
     {
@@ -37,6 +40,7 @@ class ScoreCalculationService
         $points = match (true) {
             $isExact => self::POINTS_EXACT,
             $isCorrectOutcome => self::POINTS_OUTCOME + ($isCorrectTeamScore ? self::POINTS_TEAM_SCORE : 0),
+            $isCorrectTeamScore => self::POINTS_TEAM_SCORE,
             default => 0,
         };
 

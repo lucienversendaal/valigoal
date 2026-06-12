@@ -186,7 +186,8 @@ class DemoTournamentSeeder extends Seeder
      *   1 → juiste uitkomst + één team exact goed (4); bij gelijkspel niet
      *       mogelijk, dan valt het terug op 3
      *   2 → juiste uitkomst, geen team exact goed (3)
-     *   3 → verkeerde uitkomst (0)
+     *   3 → verkeerde uitkomst (0); bij een gelijkspel klopt hier het thuisteam,
+     *       wat dan 1 punt oplevert
      *
      * @return array{0: int, 1: int} [thuisscore, uitscore]
      */

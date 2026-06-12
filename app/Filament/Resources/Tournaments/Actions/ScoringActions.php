@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Tournaments\Actions;
 
+use App\Models\ApiSyncLog;
 use App\Models\Tournament;
 use App\Services\Scoring\ScoreCalculationService;
 use Filament\Actions\Action;
@@ -34,9 +35,22 @@ class ScoringActions
             ->modalHeading('Wedstrijdscores herberekenen')
             ->modalDescription('Berekent de punten van álle voltooide wedstrijden opnieuw op basis van de huidige eindstanden. Handig na een gecorrigeerde uitslag.')
             ->action(function (Action $action) {
+                /** @var Tournament $tournament */
                 $tournament = $action->getRecord();
 
+                $start = hrtime(true);
                 $scored = app(ScoreCalculationService::class)->recalculateMatches($tournament);
+
+                ApiSyncLog::create([
+                    'type' => 'scoring',
+                    'status' => 'success',
+                    'endpoint' => 'recalculateMatches',
+                    'items_processed' => $scored,
+                    'message' => "{$scored} voltooide wedstrijd(en) opnieuw gescoord voor toernooi \"{$tournament->name}\".",
+                    'context' => ['tournament_id' => $tournament->id, 'matches_scored' => $scored],
+                    'duration_ms' => (int) ((hrtime(true) - $start) / 1e6),
+                    'triggered_manually' => true,
+                ]);
 
                 Notification::make()
                     ->title('Scores herberekend')
@@ -60,8 +74,25 @@ class ScoringActions
                 $tournament = $action->getRecord();
                 $scoring = app(ScoreCalculationService::class);
 
+                $start = hrtime(true);
                 $resolved = $scoring->resolveFinalOutcome($tournament);
                 $correct = $scoring->awardBonuses($tournament);
+
+                ApiSyncLog::create([
+                    'type' => 'bonuses',
+                    'status' => 'success',
+                    'endpoint' => 'awardBonuses',
+                    'items_processed' => $correct,
+                    'message' => "{$correct} bonusvoorspelling(en) goed gerekend voor toernooi \"{$tournament->name}\".",
+                    'context' => [
+                        'tournament_id' => $tournament->id,
+                        'bonuses_correct' => $correct,
+                        'winner_resolved' => $resolved,
+                        'winner_team_id' => $tournament->winner_team_id,
+                    ],
+                    'duration_ms' => (int) ((hrtime(true) - $start) / 1e6),
+                    'triggered_manually' => true,
+                ]);
 
                 $notification = Notification::make()
                     ->title('Bonussen toegekend')
