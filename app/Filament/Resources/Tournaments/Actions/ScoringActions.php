@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Tournaments\Actions;
 
+use App\Jobs\RecalculateScoresJob;
 use App\Models\ApiSyncLog;
 use App\Models\Tournament;
 use App\Services\Scoring\ScoreCalculationService;
@@ -38,23 +39,11 @@ class ScoringActions
                 /** @var Tournament $tournament */
                 $tournament = $action->getRecord();
 
-                $start = hrtime(true);
-                $scored = app(ScoreCalculationService::class)->recalculateMatches($tournament);
-
-                ApiSyncLog::create([
-                    'type' => 'scoring',
-                    'status' => 'success',
-                    'endpoint' => 'recalculateMatches',
-                    'items_processed' => $scored,
-                    'message' => "{$scored} voltooide wedstrijd(en) opnieuw gescoord voor toernooi \"{$tournament->name}\".",
-                    'context' => ['tournament_id' => $tournament->id, 'matches_scored' => $scored],
-                    'duration_ms' => (int) ((hrtime(true) - $start) / 1e6),
-                    'triggered_manually' => true,
-                ]);
+                RecalculateScoresJob::dispatch($tournament, manual: true);
 
                 Notification::make()
-                    ->title('Scores herberekend')
-                    ->body("{$scored} voltooide wedstrijd(en) opnieuw gescoord.")
+                    ->title('Herberekening gestart')
+                    ->body('De scores worden op de achtergrond opnieuw berekend. Ververs de ApiSyncLogs voor het resultaat.')
                     ->success()
                     ->send();
             });
