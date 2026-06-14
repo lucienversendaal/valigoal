@@ -18,6 +18,7 @@ Route::get('/', function () {
 Route::middleware(['auth', 'verified', 'not-blocked'])->group(function () {
     Route::livewire('dashboard', 'pages::dashboard')->name('dashboard');
     Route::livewire('voorspellen', 'pages::predictions')->name('predictions');
+    Route::livewire('uitslagen', 'pages::results')->name('results');
     Route::livewire('klassement', 'pages::leaderboard')->name('leaderboard');
     Route::livewire('poules', 'pages::standings')->name('standings');
     Route::livewire('poules/{group}', 'pages::group')->name('group');

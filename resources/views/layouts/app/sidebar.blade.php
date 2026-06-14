@@ -21,6 +21,9 @@
                     <flux:sidebar.item icon="pencil-square" :href="route('predictions')" :current="request()->routeIs('predictions')" wire:navigate>
                         {{ __('Voorspellen') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="list-bullet" :href="route('results')" :current="request()->routeIs('results')" wire:navigate>
+                        {{ __('Uitslagen') }}
+                    </flux:sidebar.item>
                     <flux:sidebar.item icon="table-cells" :href="route('standings')" :current="request()->routeIs('standings')" wire:navigate>
                         {{ __('Poules') }}
                     </flux:sidebar.item>

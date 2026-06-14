@@ -3,6 +3,7 @@
 use App\Models\GameMatch;
 use App\Models\HistoricalFact;
 use App\Models\Tournament;
+use App\Services\Predictions\PredictionLockService;
 use App\Services\Scoring\LeaderboardService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -75,16 +76,58 @@ new #[Title('Dashboard')] class extends Component {
             ->get();
     }
 
+    /**
+     * The match to highlight "now": a live match if there is one, otherwise the
+     * most recently kicked-off match (so it is locked and predictions are shown).
+     */
     #[Computed]
-    public function recentResults()
+    public function currentMatch(): ?GameMatch
     {
-        return GameMatch::query()
-            ->when($this->tournament, fn ($q) => $q->where('tournament_id', $this->tournament->id))
-            ->where('status', 'FINISHED')
+        $tournament = $this->tournament;
+
+        $base = GameMatch::query()
+            ->when($tournament, fn ($q) => $q->where('tournament_id', $tournament->id))
+            ->whereNotNull('kickoff_at')
+            ->with(['homeTeam', 'awayTeam']);
+
+        $match = (clone $base)
+            ->whereIn('status', ['IN_PLAY', 'PAUSED'])
+            ->orderByDesc('kickoff_at')
+            ->first()
+            ?? (clone $base)
+                ->where('kickoff_at', '<', now())
+                ->orderByDesc('kickoff_at')
+                ->first();
+
+        if ($match) {
+            $tournament && $match->setRelation('tournament', $tournament);
+        }
+
+        return $match && $match->isLocked() ? $match : null;
+    }
+
+    /**
+     * The next match to be played. Other participants' predictions only become
+     * visible once it locks; until then we just show your own.
+     */
+    #[Computed]
+    public function nextMatch(): ?GameMatch
+    {
+        $tournament = $this->tournament;
+
+        $match = GameMatch::query()
+            ->when($tournament, fn ($q) => $q->where('tournament_id', $tournament->id))
+            ->upcoming()
+            ->whereNotNull('home_team_id')
+            ->whereNotNull('away_team_id')
             ->with(['homeTeam', 'awayTeam', 'predictions' => fn ($q) => $q->where('user_id', Auth::id())])
-            ->orderByDesc('finished_at')
-            ->take(4)
-            ->get();
+            ->first();
+
+        if ($match) {
+            $tournament && $match->setRelation('tournament', $tournament);
+        }
+
+        return $match;
     }
 }; ?>
 
@@ -155,32 +198,39 @@ new #[Title('Dashboard')] class extends Component {
                     @endforelse
                 </flux:card>
 
-                {{-- Recent results --}}
-                <flux:card class="space-y-4">
-                    <flux:heading size="lg" class="font-display">Recente uitslagen</flux:heading>
-                    @forelse ($this->recentResults as $match)
-                        @php($pred = $match->predictions->first())
-                        <div class="flex items-center justify-between rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
-                            <div class="flex items-center gap-3">
-                                <x-vg.team-badge :team="$match->homeTeam" />
-                                <span class="font-display text-lg font-bold">{{ $match->home_score }}–{{ $match->away_score }}</span>
-                                <x-vg.team-badge :team="$match->awayTeam" reverse />
-                            </div>
-                            @if ($pred)
-                                <div class="flex items-center gap-2">
-                                    <span class="text-xs text-zinc-500">jij: {{ $pred->home_score }}–{{ $pred->away_score }}</span>
-                                    <flux:badge :color="$pred->points >= 5 ? 'green' : ($pred->points > 0 ? 'amber' : 'zinc')" size="sm">
-                                        +{{ $pred->points ?? 0 }}
-                                    </flux:badge>
-                                </div>
-                            @else
-                                <flux:badge color="zinc" size="sm">niet voorspeld</flux:badge>
-                            @endif
-                        </div>
-                    @empty
-                        <flux:text>Nog geen uitslagen bekend.</flux:text>
-                    @endforelse
-                </flux:card>
+                {{-- Now & next, with everyone's predictions --}}
+                <div class="flex items-center justify-between">
+                    <flux:heading size="lg" class="font-display">Wedstrijden</flux:heading>
+                    <flux:link :href="route('results')" wire:navigate class="text-sm">Alle uitslagen &rarr;</flux:link>
+                </div>
+
+                @if ($this->currentMatch)
+                    <div class="space-y-2">
+                        <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                            {{ $this->currentMatch->status->isLive() ? 'Nu live' : 'Laatst gespeeld' }}
+                        </flux:text>
+                        <x-vg.match-predictions
+                            :match="$this->currentMatch"
+                            :predictions="app(PredictionLockService::class)->visiblePredictions($this->currentMatch)" />
+                    </div>
+                @endif
+
+                @if ($this->nextMatch)
+                    <div class="space-y-2">
+                        <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Eerstvolgende wedstrijd</flux:text>
+                        @if ($this->nextMatch->isLocked())
+                            <x-vg.match-predictions
+                                :match="$this->nextMatch"
+                                :predictions="app(PredictionLockService::class)->visiblePredictions($this->nextMatch)" />
+                        @else
+                            <x-vg.match-fixture :match="$this->nextMatch" :prediction="$this->nextMatch->predictions->first()" />
+                        @endif
+                    </div>
+                @endif
+
+                @unless ($this->currentMatch || $this->nextMatch)
+                    <flux:card><flux:text>Nog geen wedstrijden om te tonen.</flux:text></flux:card>
+                @endunless
             </div>
 
             {{-- Right column --}}

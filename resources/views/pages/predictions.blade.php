@@ -174,30 +174,17 @@ new #[Title('Voorspellen')] class extends Component {
             </section>
         @endif
 
-        {{-- Locked / live — everyone's predictions, per match --}}
-        @if (($this->matches['locked'] ?? collect())->isNotEmpty())
-            <section class="space-y-3">
-                <flux:heading size="lg" class="font-display">Gesloten &amp; live</flux:heading>
-                <flux:text class="!mt-0 text-sm">Voorspellingen zijn nu zichtbaar voor iedereen.</flux:text>
-
-                @foreach ($this->matches['locked'] as $match)
-                    <x-vg.match-predictions
-                        :match="$match"
-                        :predictions="app(PredictionLockService::class)->visiblePredictions($match)" />
-                @endforeach
-            </section>
-        @endif
-
-        {{-- Finished — full overview with everyone's predictions and points --}}
-        @if (($this->matches['finished'] ?? collect())->isNotEmpty())
-            <section class="space-y-3">
-                <flux:heading size="lg" class="font-display">Afgelopen</flux:heading>
-                <flux:text class="!mt-0 text-sm">Goud = exact, groen = juiste uitkomst, grijs = mis.</flux:text>
-                @foreach ($this->matches['finished'] as $match)
-                    <x-vg.match-predictions
-                        :match="$match"
-                        :predictions="app(PredictionLockService::class)->visiblePredictions($match)" />
-                @endforeach
-            </section>
+        {{-- Closed & finished matches with everyone's predictions now live on the
+             dedicated results page to keep this page focused on entering scores. --}}
+        @if (($this->matches['locked'] ?? collect())->isNotEmpty() || ($this->matches['finished'] ?? collect())->isNotEmpty())
+            <flux:card class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <flux:heading class="font-display">Uitslagen &amp; ieders voorspellingen</flux:heading>
+                    <flux:text class="!mt-0 text-sm">Gesloten, live en afgelopen wedstrijden bekijk je nu per speeldag.</flux:text>
+                </div>
+                <flux:button :href="route('results')" wire:navigate variant="primary" icon="list-bullet">
+                    Naar uitslagen
+                </flux:button>
+            </flux:card>
         @endif
     </div>
