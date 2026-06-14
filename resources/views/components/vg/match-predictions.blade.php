@@ -24,6 +24,10 @@
             @if ($match->groupLetter())
                 <flux:badge color="zinc" size="sm">Groep {{ $match->groupLetter() }}</flux:badge>
             @endif
+            @if ($match->kickoff_at)
+                <flux:text class="text-xs">{{ $match->kickoff_at->timezone('Europe/Amsterdam')->isoFormat('ddd D MMM HH:mm') }}</flux:text>
+                <span class="text-zinc-300 dark:text-zinc-600">·</span>
+            @endif
             <flux:text class="text-xs">{{ $predictions->count() }} voorspellingen</flux:text>
         </div>
     </div>
