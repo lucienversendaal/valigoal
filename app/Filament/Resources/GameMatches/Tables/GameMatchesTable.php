@@ -7,6 +7,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
 class GameMatchesTable
@@ -53,6 +54,9 @@ class GameMatchesTable
                     ->sortable(),
                 IconColumn::make('points_awarded')
                     ->boolean(),
+                IconColumn::make('result_locked')
+                    ->label('Vergrendeld')
+                    ->boolean(),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -63,7 +67,8 @@ class GameMatchesTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                TernaryFilter::make('result_locked')
+                    ->label('Resultaat vergrendeld'),
             ])
             ->recordActions([
                 EditAction::make(),

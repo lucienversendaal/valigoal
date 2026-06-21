@@ -42,6 +42,9 @@ class GameMatchForm
                 DateTimePicker::make('last_synced_at'),
                 Toggle::make('points_awarded')
                     ->required(),
+                Toggle::make('result_locked')
+                    ->label('Resultaat vergrendeld')
+                    ->helperText('Aan: de synchronisatie overschrijft de score/uitslag van deze wedstrijd niet meer. Wordt automatisch aangezet zodra je de score handmatig wijzigt.'),
             ]);
     }
 }

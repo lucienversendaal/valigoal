@@ -236,6 +236,16 @@ class FootballDataSync
             $status = 'TIMED';
         }
 
+        // A result_locked match was corrected by hand in the admin. The API's
+        // (wrong) score must not clobber it, so freeze the result fields and keep
+        // whatever an admin stored.
+        if ($existing?->result_locked) {
+            $homeScore = $existing->home_score;
+            $awayScore = $existing->away_score;
+            $winner = $existing->winner;
+            $status = $existing->status->value;
+        }
+
         return GameMatch::updateOrCreate(
             ['external_id' => $match['id']],
             [
@@ -250,7 +260,9 @@ class FootballDataSync
                 'home_score' => $homeScore,
                 'away_score' => $awayScore,
                 'winner' => $winner,
-                'finished_at' => $status === 'FINISHED' ? ($existing?->finished_at ?? now()) : null,
+                'finished_at' => $existing?->result_locked
+                    ? $existing->finished_at
+                    : ($status === 'FINISHED' ? ($existing?->finished_at ?? now()) : null),
                 'last_synced_at' => now(),
             ],
         );

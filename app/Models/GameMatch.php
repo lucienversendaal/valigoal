@@ -29,6 +29,7 @@ class GameMatch extends Model
             'away_score' => 'integer',
             'matchday' => 'integer',
             'points_awarded' => 'boolean',
+            'result_locked' => 'boolean',
             'odds' => 'array',
             'odds_updated_at' => 'datetime',
         ];

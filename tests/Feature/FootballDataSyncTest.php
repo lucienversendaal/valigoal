@@ -125,6 +125,44 @@ class FootballDataSyncTest extends TestCase
         $this->assertSame('FINISHED', $match->status->value);
     }
 
+    public function test_a_locked_result_is_not_overwritten_by_the_sync(): void
+    {
+        $tournament = Tournament::create(['name' => 'WK', 'code' => 'WC', 'is_active' => true]);
+        // An admin corrected the result by hand and locked it.
+        GameMatch::create([
+            'tournament_id' => $tournament->id,
+            'external_id' => 100,
+            'kickoff_at' => now()->subDay(),
+            'status' => 'FINISHED',
+            'home_score' => 2,
+            'away_score' => 1,
+            'winner' => 'HOME_TEAM',
+            'result_locked' => true,
+        ]);
+
+        // The API still returns its (wrong) score for the same match.
+        Http::fake([
+            'api.football-data.org/*' => Http::response([
+                'matches' => [[
+                    'id' => 100,
+                    'status' => 'FINISHED',
+                    'utcDate' => '2026-06-12T19:00:00Z',
+                    'homeTeam' => ['id' => 1, 'name' => 'Nederland', 'tla' => 'NED'],
+                    'awayTeam' => ['id' => 2, 'name' => 'Brazilië', 'tla' => 'BRA'],
+                    'score' => ['winner' => 'AWAY_TEAM', 'fullTime' => ['home' => 0, 'away' => 3]],
+                ]],
+            ]),
+        ]);
+
+        app(FootballDataSync::class)->syncResults($tournament);
+
+        $match = GameMatch::where('external_id', 100)->first();
+        $this->assertSame(2, $match->home_score);
+        $this->assertSame(1, $match->away_score);
+        $this->assertSame('HOME_TEAM', $match->winner);
+        $this->assertSame('FINISHED', $match->status->value);
+    }
+
     public function test_score_arriving_via_fixtures_is_still_awarded_by_results_sync(): void
     {
         $tournament = Tournament::create(['name' => 'WK', 'code' => 'WC', 'is_active' => true]);
