@@ -218,15 +218,54 @@ class FootballDataSync
         $awayId = $this->resolveTeamId($tournament, $match['awayTeam'] ?? []);
         $existing = GameMatch::where('external_id', $match['id'])->first();
 
-        $fullTime = $match['score']['fullTime'] ?? [];
-        $incomingHasScore = isset($fullTime['home'], $fullTime['away']);
+        $score = $match['score'] ?? [];
+        $fullTime = $score['fullTime'] ?? [];
+        $regularTime = $score['regularTime'] ?? [];
+        $extraTime = $score['extraTime'] ?? [];
 
-        // football-data occasionally returns a match without its fullTime score
+        // Bij verlenging/strafschoppen telt football-data de extra goals én de
+        // strafschoppen mee in fullTime (1-1 wordt zo 4-5). De stand na 90
+        // minuten staat in regularTime; dáártegen rekenen we voorspellingen af.
+        $regulation = isset($regularTime['home'], $regularTime['away']) ? $regularTime : $fullTime;
+        $incomingHasScore = isset($regulation['home'], $regulation['away']);
+
+        // football-data occasionally returns a match without its score
         // (e.g. it flags the opening game as FINISHED before publishing the result).
         // Keep any score we already stored rather than wiping it back to null.
-        $homeScore = $incomingHasScore ? $fullTime['home'] : $existing?->home_score;
-        $awayScore = $incomingHasScore ? $fullTime['away'] : $existing?->away_score;
-        $winner = $incomingHasScore ? ($match['score']['winner'] ?? null) : $existing?->winner;
+        $homeScore = $incomingHasScore ? $regulation['home'] : $existing?->home_score;
+        $awayScore = $incomingHasScore ? $regulation['away'] : $existing?->away_score;
+
+        // `winner` houdt de doorgestoten ploeg vast (na verlenging/strafschoppen)
+        // zodat het knockoutschema en de finale-bonus blijven kloppen, ook al
+        // staat de 90-minutenstand gelijk.
+        $winner = $incomingHasScore ? $this->advancingTeam($regulation, $fullTime) : $existing?->winner;
+
+        $decidedBy = $incomingHasScore
+            ? $this->mapDuration($score['duration'] ?? null)
+            : $existing?->decided_by;
+
+        // Het `penalties`-veld van football-data is onbetrouwbaar (rapporteert
+        // gelijke standen als 3-3 terwijl er een winnaar is). fullTime bevat de
+        // strafschoppen bovenop de stand na 90 min + verlenging, dus leiden we
+        // de echte reeks af uit het verschil.
+        [$penaltyHome, $penaltyAway] = $incomingHasScore
+            ? ($decidedBy === 'PENALTIES'
+                ? $this->shootoutScore($fullTime, $regularTime, $extraTime)
+                : [null, null])
+            : [$existing?->penalty_home_score, $existing?->penalty_away_score];
+
+        // A knockout tie always has a winner. football-data sometimes degrades a
+        // decided result back to all-square (e.g. fullTime 4-4, no winner), which
+        // would wipe a winner we already resolved. When the fresh payload can't
+        // name a winner but we already had one, keep the stored decision.
+        $isKnockoutDecider = in_array($decidedBy, ['EXTRA_TIME', 'PENALTIES'], true);
+
+        if ($incomingHasScore && $isKnockoutDecider && $winner === null && $existing?->winner !== null) {
+            $winner = $existing->winner;
+            $decidedBy = $existing->decided_by ?? $decidedBy;
+            $penaltyHome = $existing->penalty_home_score;
+            $penaltyAway = $existing->penalty_away_score;
+        }
 
         $status = $match['status'] ?? 'SCHEDULED';
 
@@ -243,6 +282,9 @@ class FootballDataSync
             $homeScore = $existing->home_score;
             $awayScore = $existing->away_score;
             $winner = $existing->winner;
+            $decidedBy = $existing->decided_by;
+            $penaltyHome = $existing->penalty_home_score;
+            $penaltyAway = $existing->penalty_away_score;
             $status = $existing->status->value;
         }
 
@@ -260,12 +302,77 @@ class FootballDataSync
                 'home_score' => $homeScore,
                 'away_score' => $awayScore,
                 'winner' => $winner,
+                'decided_by' => $decidedBy,
+                'penalty_home_score' => $penaltyHome,
+                'penalty_away_score' => $penaltyAway,
                 'finished_at' => $existing?->result_locked
                     ? $existing->finished_at
                     : ($status === 'FINISHED' ? ($existing?->finished_at ?? now()) : null),
                 'last_synced_at' => now(),
             ],
         );
+    }
+
+    /**
+     * The team that progressed. fullTime already includes extra time and the
+     * shootout, so it points at the winner of a knockout tie; fall back to the
+     * regulation score otherwise. Returns null for a genuine regulation draw
+     * (group stage).
+     *
+     * @param  array<string, int|null>  $regulation
+     * @param  array<string, int|null>  $fullTime
+     */
+    protected function advancingTeam(array $regulation, array $fullTime): ?string
+    {
+        $decider = isset($fullTime['home'], $fullTime['away']) ? $fullTime : $regulation;
+
+        if (! isset($decider['home'], $decider['away'])) {
+            return null;
+        }
+
+        return match (true) {
+            $decider['home'] > $decider['away'] => 'HOME_TEAM',
+            $decider['home'] < $decider['away'] => 'AWAY_TEAM',
+            default => null,
+        };
+    }
+
+    /**
+     * Reconstruct the real shootout tally from the score deltas, because
+     * football-data's own `penalties` field reports tied scores. fullTime
+     * carries regulation + extra time + penalties, so subtract the first two.
+     *
+     * @param  array<string, int|null>  $fullTime
+     * @param  array<string, int|null>  $regularTime
+     * @param  array<string, int|null>  $extraTime
+     * @return array{0: int|null, 1: int|null}
+     */
+    protected function shootoutScore(array $fullTime, array $regularTime, array $extraTime): array
+    {
+        if (! isset($fullTime['home'], $fullTime['away'], $regularTime['home'], $regularTime['away'])) {
+            return [null, null];
+        }
+
+        $extraHome = $extraTime['home'] ?? 0;
+        $extraAway = $extraTime['away'] ?? 0;
+
+        return [
+            $fullTime['home'] - $regularTime['home'] - $extraHome,
+            $fullTime['away'] - $regularTime['away'] - $extraAway,
+        ];
+    }
+
+    /**
+     * Normalise football-data's `duration` to the value we store.
+     */
+    protected function mapDuration(?string $duration): ?string
+    {
+        return match ($duration) {
+            'PENALTY_SHOOTOUT', 'PENALTIES' => 'PENALTIES',
+            'EXTRA_TIME' => 'EXTRA_TIME',
+            'REGULAR' => 'REGULAR',
+            default => null,
+        };
     }
 
     /**

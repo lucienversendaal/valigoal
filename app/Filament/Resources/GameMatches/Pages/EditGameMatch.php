@@ -30,11 +30,13 @@ class EditGameMatch extends EditRecord
      */
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        $original = $this->record->only(['home_score', 'away_score', 'winner']);
+        $original = $this->record->only(['home_score', 'away_score', 'winner', 'penalty_home_score', 'penalty_away_score']);
 
         $this->resultChanged = (int) ($data['home_score'] ?? null) !== (int) ($original['home_score'] ?? null)
             || (int) ($data['away_score'] ?? null) !== (int) ($original['away_score'] ?? null)
-            || ($data['winner'] ?? null) !== ($original['winner'] ?? null);
+            || ($data['winner'] ?? null) !== ($original['winner'] ?? null)
+            || (int) ($data['penalty_home_score'] ?? null) !== (int) ($original['penalty_home_score'] ?? null)
+            || (int) ($data['penalty_away_score'] ?? null) !== (int) ($original['penalty_away_score'] ?? null);
 
         if ($this->resultChanged) {
             $data['result_locked'] = true;

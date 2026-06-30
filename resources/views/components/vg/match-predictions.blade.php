@@ -14,7 +14,12 @@
         <div class="flex items-center gap-3">
             <x-vg.team-badge :team="$match->homeTeam" reverse />
             @if ($finished)
-                <span class="font-display text-xl font-bold">{{ $match->home_score }}–{{ $match->away_score }}</span>
+                <span class="flex items-baseline gap-1.5">
+                    <span class="font-display text-xl font-bold">{{ $match->home_score }}–{{ $match->away_score }}</span>
+                    @if ($suffix = $match->resultSuffix())
+                        <span class="text-xs font-medium text-zinc-400">{{ $suffix }}</span>
+                    @endif
+                </span>
             @else
                 <flux:badge :color="$match->status->isLive() ? 'red' : 'zinc'" size="sm">{{ $match->status->label() }}</flux:badge>
             @endif

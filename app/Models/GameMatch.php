@@ -27,6 +27,8 @@ class GameMatch extends Model
             'status' => MatchStatus::class,
             'home_score' => 'integer',
             'away_score' => 'integer',
+            'penalty_home_score' => 'integer',
+            'penalty_away_score' => 'integer',
             'matchday' => 'integer',
             'points_awarded' => 'boolean',
             'result_locked' => 'boolean',
@@ -109,6 +111,31 @@ class GameMatch extends Model
     public function isOpen(): bool
     {
         return ! $this->isLocked() && $this->homeTeam && $this->awayTeam;
+    }
+
+    public function wentToShootout(): bool
+    {
+        return $this->decided_by === 'PENALTIES'
+            && $this->penalty_home_score !== null
+            && $this->penalty_away_score !== null;
+    }
+
+    public function wentToExtraTime(): bool
+    {
+        return $this->decided_by === 'EXTRA_TIME';
+    }
+
+    /**
+     * A short suffix to render after the 90-minute score, e.g. "n.s. 4-5"
+     * (na strafschoppen) or "n.v." (na verlenging). Null for a regular result.
+     */
+    public function resultSuffix(): ?string
+    {
+        return match (true) {
+            $this->wentToShootout() => "n.s. {$this->penalty_home_score}-{$this->penalty_away_score}",
+            $this->wentToExtraTime() => 'n.v.',
+            default => null,
+        };
     }
 
     public function hasResult(): bool

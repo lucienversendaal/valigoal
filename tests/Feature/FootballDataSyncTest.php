@@ -61,6 +61,116 @@ class FootballDataSyncTest extends TestCase
         $this->assertSame(3, Prediction::where('user_id', $outcomeUser->id)->first()->points);
     }
 
+    public function test_penalty_shootout_stores_the_90_minute_score_and_scores_against_it(): void
+    {
+        // football-data telt de strafschoppen mee in fullTime (1-1 wordt 4-5).
+        // We willen tegen de 90-minutenstand (regularTime) afrekenen.
+        Http::fake([
+            'api.football-data.org/*' => Http::response([
+                'matches' => [[
+                    'id' => 537415,
+                    'status' => 'FINISHED',
+                    'utcDate' => '2026-06-29T20:30:00Z',
+                    'stage' => 'LAST_16',
+                    'homeTeam' => ['id' => 1, 'name' => 'Germany', 'tla' => 'GER'],
+                    'awayTeam' => ['id' => 2, 'name' => 'Paraguay', 'tla' => 'PAR'],
+                    'score' => [
+                        'winner' => null,
+                        'duration' => 'PENALTY_SHOOTOUT',
+                        'fullTime' => ['home' => 4, 'away' => 5],
+                        'regularTime' => ['home' => 1, 'away' => 1],
+                        'extraTime' => ['home' => 0, 'away' => 0],
+                        // football-data rapporteert hier een gelijke (foute)
+                        // reeks; de echte stand leiden we af uit fullTime.
+                        'penalties' => ['home' => 4, 'away' => 4],
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $tournament = Tournament::create(['name' => 'WK', 'code' => 'WC', 'is_active' => true]);
+        $match = GameMatch::create([
+            'tournament_id' => $tournament->id,
+            'external_id' => 537415,
+            'kickoff_at' => '2026-06-29 20:30:00',
+            'status' => 'TIMED',
+        ]);
+
+        $exactUser = User::factory()->create();
+        Prediction::create(['user_id' => $exactUser->id, 'match_id' => $match->id, 'home_score' => 1, 'away_score' => 1]);
+
+        $missUser = User::factory()->create();
+        Prediction::create(['user_id' => $missUser->id, 'match_id' => $match->id, 'home_score' => 4, 'away_score' => 5]);
+
+        app(FootballDataSync::class)->syncResults($tournament);
+
+        $match->refresh();
+        $this->assertSame(1, $match->home_score);
+        $this->assertSame(1, $match->away_score);
+        $this->assertSame('PENALTIES', $match->decided_by);
+        // Echte reeks afgeleid uit fullTime (4-5) − regularTime (1-1): 3-4.
+        $this->assertSame(3, $match->penalty_home_score);
+        $this->assertSame(4, $match->penalty_away_score);
+        // De doorgestoten ploeg (uit) wint de strafschoppenreeks.
+        $this->assertSame('AWAY_TEAM', $match->winner);
+        $this->assertTrue($match->wentToShootout());
+        $this->assertSame('n.s. 3-4', $match->resultSuffix());
+
+        // 1-1 voorspeld = exact (5 punten); 4-5 voorspeld telt niet mee.
+        $this->assertSame(5, Prediction::where('user_id', $exactUser->id)->first()->points);
+        $this->assertSame(0, Prediction::where('user_id', $missUser->id)->first()->points);
+    }
+
+    public function test_a_degraded_penalty_payload_does_not_wipe_a_resolved_winner(): void
+    {
+        // football-data soms degradeert een beslist duel terug naar een gelijke
+        // stand zonder winnaar (fullTime 4-4). Dat mag de al vastgestelde
+        // doorgestoten ploeg + strafschoppenreeks niet wissen.
+        $tournament = Tournament::create(['name' => 'WK', 'code' => 'WC', 'is_active' => true]);
+        GameMatch::create([
+            'tournament_id' => $tournament->id,
+            'external_id' => 537418,
+            'kickoff_at' => now()->subDay(),
+            'status' => 'FINISHED',
+            'home_score' => 1,
+            'away_score' => 1,
+            'decided_by' => 'PENALTIES',
+            'penalty_home_score' => 2,
+            'penalty_away_score' => 3,
+            'winner' => 'AWAY_TEAM',
+            'points_awarded' => true,
+        ]);
+
+        Http::fake([
+            'api.football-data.org/*' => Http::response([
+                'matches' => [[
+                    'id' => 537418,
+                    'status' => 'FINISHED',
+                    'utcDate' => '2026-06-30T01:00:00Z',
+                    'stage' => 'LAST_16',
+                    'homeTeam' => ['id' => 1, 'name' => 'Netherlands', 'tla' => 'NED'],
+                    'awayTeam' => ['id' => 2, 'name' => 'Morocco', 'tla' => 'MAR'],
+                    'score' => [
+                        'winner' => null,
+                        'duration' => 'PENALTY_SHOOTOUT',
+                        'fullTime' => ['home' => 4, 'away' => 4],
+                        'regularTime' => ['home' => 1, 'away' => 1],
+                        'extraTime' => ['home' => 0, 'away' => 0],
+                        'penalties' => ['home' => 3, 'away' => 3],
+                    ],
+                ]],
+            ]),
+        ]);
+
+        app(FootballDataSync::class)->syncResults($tournament);
+
+        $match = GameMatch::where('external_id', 537418)->first();
+        $this->assertSame('AWAY_TEAM', $match->winner);
+        $this->assertSame(2, $match->penalty_home_score);
+        $this->assertSame(3, $match->penalty_away_score);
+        $this->assertSame('n.s. 2-3', $match->resultSuffix());
+    }
+
     public function test_finished_status_without_a_score_is_not_recorded_as_finished(): void
     {
         // football-data flags the opening match FINISHED before the score is in.

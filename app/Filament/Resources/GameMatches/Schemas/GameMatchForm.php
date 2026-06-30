@@ -36,8 +36,24 @@ class GameMatchForm
                 TextInput::make('home_score')
                     ->numeric(),
                 TextInput::make('away_score')
+                    ->numeric()
+                    ->helperText('Stand na 90 minuten (regulier). Voorspellingen worden hiertegen afgerekend.'),
+                Select::make('decided_by')
+                    ->label('Beslist door')
+                    ->options([
+                        'REGULAR' => 'Reguliere tijd',
+                        'EXTRA_TIME' => 'Verlenging',
+                        'PENALTIES' => 'Strafschoppen',
+                    ])
+                    ->native(false),
+                TextInput::make('penalty_home_score')
+                    ->label('Strafschoppen thuis')
                     ->numeric(),
-                TextInput::make('winner'),
+                TextInput::make('penalty_away_score')
+                    ->label('Strafschoppen uit')
+                    ->numeric(),
+                TextInput::make('winner')
+                    ->helperText('Doorgestoten ploeg: HOME_TEAM of AWAY_TEAM (na verlenging/strafschoppen), leeg bij gelijkspel.'),
                 DateTimePicker::make('finished_at'),
                 DateTimePicker::make('last_synced_at'),
                 Toggle::make('points_awarded')

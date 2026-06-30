@@ -20,10 +20,15 @@
             @if ($schema)<span class="text-zinc-400">#{{ $schema['number'] }}</span> · @endif
             {{ $match->kickoff_at?->timezone('Europe/Amsterdam')->isoFormat('D MMM HH:mm') ?? 'Datum tbd' }}
         </span>
-        <flux:badge :color="$finished ? 'green' : ($match->status->isLive() ? 'red' : 'zinc')" size="sm">{{ $match->status->label() }}</flux:badge>
+        <span class="flex items-center gap-1.5">
+            @if ($finished && ($suffix = $match->resultSuffix()))
+                <span class="text-[10px] font-semibold text-zinc-400">{{ $suffix }}</span>
+            @endif
+            <flux:badge :color="$finished ? 'green' : ($match->status->isLive() ? 'red' : 'zinc')" size="sm">{{ $match->status->label() }}</flux:badge>
+        </span>
     </div>
 
-    @foreach ([['team' => $match->homeTeam, 'score' => $match->home_score, 'side' => 'HOME_TEAM', 'label' => $schema['home'] ?? 'Nader te bepalen'], ['team' => $match->awayTeam, 'score' => $match->away_score, 'side' => 'AWAY_TEAM', 'label' => $schema['away'] ?? 'Nader te bepalen']] as $i => $row)
+    @foreach ([['team' => $match->homeTeam, 'score' => $match->home_score, 'pen' => $match->penalty_home_score, 'side' => 'HOME_TEAM', 'label' => $schema['home'] ?? 'Nader te bepalen'], ['team' => $match->awayTeam, 'score' => $match->away_score, 'pen' => $match->penalty_away_score, 'side' => 'AWAY_TEAM', 'label' => $schema['away'] ?? 'Nader te bepalen']] as $i => $row)
         <div @class([
             'flex items-center gap-2 px-3 py-2 text-sm',
             'border-t border-zinc-100 dark:border-zinc-800' => $i === 1,
@@ -35,7 +40,12 @@
                 <span class="truncate text-zinc-500">{{ $row['label'] }}</span>
             @endif
             @if ($finished && $row['team'])
-                <span @class(['ml-auto font-display text-base font-bold', 'text-brand-600 dark:text-brand-400' => $winner === $row['side']])>{{ $row['score'] }}</span>
+                <span class="ml-auto flex items-baseline gap-1">
+                    @if ($match->wentToShootout())
+                        <span class="text-[11px] font-medium text-zinc-400">({{ $row['pen'] }})</span>
+                    @endif
+                    <span @class(['font-display text-base font-bold', 'text-brand-600 dark:text-brand-400' => $winner === $row['side']])>{{ $row['score'] }}</span>
+                </span>
             @endif
         </div>
     @endforeach
