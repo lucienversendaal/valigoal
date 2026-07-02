@@ -172,6 +172,10 @@ class FootballDataSyncTest extends TestCase
         $this->assertSame('HOME_TEAM', $match->winner);
         $this->assertTrue($match->wentToExtraTime());
         $this->assertNull($match->penalty_home_score);
+        // Eindstand na verlenging apart bewaard en getoond als suffix.
+        $this->assertSame(3, $match->extra_time_home_score);
+        $this->assertSame(2, $match->extra_time_away_score);
+        $this->assertSame('n.v. 3-2', $match->resultSuffix());
 
         // 2-2 voorspeld = exact (5 punten). 3-2 (de ET-stand) is niet langer
         // exact: enkel het uitdoelpunt (2) klopt, goed voor 1 punt.

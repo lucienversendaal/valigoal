@@ -46,6 +46,13 @@ class GameMatchForm
                         'PENALTIES' => 'Strafschoppen',
                     ])
                     ->native(false),
+                TextInput::make('extra_time_home_score')
+                    ->label('Verlenging thuis')
+                    ->numeric()
+                    ->helperText('Eindstand na verlenging (thuis-uit). Alleen invullen bij een duel dat in de verlenging beslist is.'),
+                TextInput::make('extra_time_away_score')
+                    ->label('Verlenging uit')
+                    ->numeric(),
                 TextInput::make('penalty_home_score')
                     ->label('Strafschoppen thuis')
                     ->numeric(),

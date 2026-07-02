@@ -29,6 +29,8 @@ class GameMatch extends Model
             'away_score' => 'integer',
             'penalty_home_score' => 'integer',
             'penalty_away_score' => 'integer',
+            'extra_time_home_score' => 'integer',
+            'extra_time_away_score' => 'integer',
             'matchday' => 'integer',
             'points_awarded' => 'boolean',
             'result_locked' => 'boolean',
@@ -126,14 +128,29 @@ class GameMatch extends Model
     }
 
     /**
+     * The final score after extra time, e.g. "3-2", or null when it isn't
+     * known. Stored separately because home_score/away_score keep the 90-minute
+     * score that predictions are settled against.
+     */
+    public function extraTimeScoreLine(): ?string
+    {
+        if ($this->extra_time_home_score === null || $this->extra_time_away_score === null) {
+            return null;
+        }
+
+        return "{$this->extra_time_home_score}-{$this->extra_time_away_score}";
+    }
+
+    /**
      * A short suffix to render after the 90-minute score, e.g. "n.s. 4-5"
-     * (na strafschoppen) or "n.v." (na verlenging). Null for a regular result.
+     * (na strafschoppen) or "n.v. 3-2" (na verlenging). Null for a regular
+     * result, and just "n.v." when the extra-time score isn't known.
      */
     public function resultSuffix(): ?string
     {
         return match (true) {
             $this->wentToShootout() => "n.s. {$this->penalty_home_score}-{$this->penalty_away_score}",
-            $this->wentToExtraTime() => 'n.v.',
+            $this->wentToExtraTime() => rtrim('n.v. '.($this->extraTimeScoreLine() ?? '')),
             default => null,
         };
     }

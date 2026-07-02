@@ -255,6 +255,13 @@ class FootballDataSync
                 : [null, null])
             : [$existing?->penalty_home_score, $existing?->penalty_away_score];
 
+        // Eindstand na verlenging, apart bewaard zodat we die kunnen tonen (de
+        // 90-minutenstand blijft in home/away_score staan). Leeg bij een duel
+        // dat niet in de verlenging is beslist.
+        [$extraTimeHome, $extraTimeAway] = $incomingHasScore
+            ? $this->extraTimeScore($regulation, $fullTime, $extraTime, $decidedBy)
+            : [$existing?->extra_time_home_score, $existing?->extra_time_away_score];
+
         // A knockout tie always has a winner. football-data sometimes degrades a
         // decided result back to all-square (e.g. fullTime 4-4, no winner), which
         // would wipe a winner we already resolved. When the fresh payload can't
@@ -266,6 +273,8 @@ class FootballDataSync
             $decidedBy = $existing->decided_by ?? $decidedBy;
             $penaltyHome = $existing->penalty_home_score;
             $penaltyAway = $existing->penalty_away_score;
+            $extraTimeHome = $existing->extra_time_home_score;
+            $extraTimeAway = $existing->extra_time_away_score;
         }
 
         $status = $match['status'] ?? 'SCHEDULED';
@@ -286,6 +295,8 @@ class FootballDataSync
             $decidedBy = $existing->decided_by;
             $penaltyHome = $existing->penalty_home_score;
             $penaltyAway = $existing->penalty_away_score;
+            $extraTimeHome = $existing->extra_time_home_score;
+            $extraTimeAway = $existing->extra_time_away_score;
             $status = $existing->status->value;
         }
 
@@ -306,6 +317,8 @@ class FootballDataSync
                 'decided_by' => $decidedBy,
                 'penalty_home_score' => $penaltyHome,
                 'penalty_away_score' => $penaltyAway,
+                'extra_time_home_score' => $extraTimeHome,
+                'extra_time_away_score' => $extraTimeAway,
                 'finished_at' => $existing?->result_locked
                     ? $existing->finished_at
                     : ($status === 'FINISHED' ? ($existing?->finished_at ?? now()) : null),
@@ -390,6 +403,37 @@ class FootballDataSync
         }
 
         return $duration;
+    }
+
+    /**
+     * The final score after extra time (e.g. 3-2), only for a tie decided in
+     * extra time. football-data reports it as fullTime there (no shootout goals
+     * are folded in), so we use that; when fullTime is missing we rebuild it
+     * from the 90-minute score plus the extra-time goals.
+     *
+     * @param  array<string, int|null>  $regulation
+     * @param  array<string, int|null>  $fullTime
+     * @param  array<string, int|null>  $extraTime
+     * @return array{0: int|null, 1: int|null}
+     */
+    protected function extraTimeScore(array $regulation, array $fullTime, array $extraTime, ?string $decidedBy): array
+    {
+        if ($decidedBy !== 'EXTRA_TIME') {
+            return [null, null];
+        }
+
+        if (isset($fullTime['home'], $fullTime['away'])) {
+            return [$fullTime['home'], $fullTime['away']];
+        }
+
+        if (isset($regulation['home'], $regulation['away'], $extraTime['home'], $extraTime['away'])) {
+            return [
+                $regulation['home'] + $extraTime['home'],
+                $regulation['away'] + $extraTime['away'],
+            ];
+        }
+
+        return [null, null];
     }
 
     /**
