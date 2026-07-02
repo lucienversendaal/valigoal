@@ -225,8 +225,9 @@ class FootballDataSync
 
         // Bij verlenging/strafschoppen telt football-data de extra goals én de
         // strafschoppen mee in fullTime (1-1 wordt zo 4-5). De stand na 90
-        // minuten staat in regularTime; dáártegen rekenen we voorspellingen af.
-        $regulation = isset($regularTime['home'], $regularTime['away']) ? $regularTime : $fullTime;
+        // minuten rekenen we uit via regulationScore(); dáártegen rekenen we
+        // voorspellingen af.
+        $regulation = $this->regulationScore($fullTime, $regularTime, $extraTime);
         $incomingHasScore = isset($regulation['home'], $regulation['away']);
 
         // football-data occasionally returns a match without its score
@@ -241,7 +242,7 @@ class FootballDataSync
         $winner = $incomingHasScore ? $this->advancingTeam($regulation, $fullTime) : $existing?->winner;
 
         $decidedBy = $incomingHasScore
-            ? $this->mapDuration($score['duration'] ?? null)
+            ? $this->decidedBy($score)
             : $existing?->decided_by;
 
         // Het `penalties`-veld van football-data is onbetrouwbaar (rapporteert
@@ -250,7 +251,7 @@ class FootballDataSync
         // de echte reeks af uit het verschil.
         [$penaltyHome, $penaltyAway] = $incomingHasScore
             ? ($decidedBy === 'PENALTIES'
-                ? $this->shootoutScore($fullTime, $regularTime, $extraTime)
+                ? $this->shootoutScore($fullTime, $regulation, $extraTime)
                 : [null, null])
             : [$existing?->penalty_home_score, $existing?->penalty_away_score];
 
@@ -338,18 +339,72 @@ class FootballDataSync
     }
 
     /**
+     * The score after 90 minutes, which is what we settle predictions against.
+     *
+     * football-data normally reports this in `regularTime`, but it sometimes
+     * leaves `regularTime` empty while still folding the extra-time goals into
+     * `extraTime` and `fullTime` (e.g. Belgium–Senegal LAST_32: fullTime 3-2,
+     * extraTime 1-0, regularTime null). In that case the regulation score is
+     * fullTime − extraTime. Falls back to fullTime when we have nothing else.
+     *
+     * @param  array<string, int|null>  $fullTime
+     * @param  array<string, int|null>  $regularTime
+     * @param  array<string, int|null>  $extraTime
+     * @return array<string, int|null>
+     */
+    protected function regulationScore(array $fullTime, array $regularTime, array $extraTime): array
+    {
+        if (isset($regularTime['home'], $regularTime['away'])) {
+            return $regularTime;
+        }
+
+        if (isset($fullTime['home'], $fullTime['away'], $extraTime['home'], $extraTime['away'])) {
+            return [
+                'home' => $fullTime['home'] - $extraTime['home'],
+                'away' => $fullTime['away'] - $extraTime['away'],
+            ];
+        }
+
+        return $fullTime;
+    }
+
+    /**
+     * How a match was decided. football-data's `duration` is unreliable (it
+     * labelled the extra-time Belgium–Senegal tie as `REGULAR`), so when the
+     * payload isn't a shootout we trust a populated `extraTime` over `duration`.
+     *
+     * @param  array<string, mixed>  $score
+     */
+    protected function decidedBy(array $score): ?string
+    {
+        $duration = $this->mapDuration($score['duration'] ?? null);
+
+        if ($duration === 'PENALTIES') {
+            return 'PENALTIES';
+        }
+
+        $extraTime = $score['extraTime'] ?? [];
+
+        if (isset($extraTime['home'], $extraTime['away'])) {
+            return 'EXTRA_TIME';
+        }
+
+        return $duration;
+    }
+
+    /**
      * Reconstruct the real shootout tally from the score deltas, because
      * football-data's own `penalties` field reports tied scores. fullTime
      * carries regulation + extra time + penalties, so subtract the first two.
      *
      * @param  array<string, int|null>  $fullTime
-     * @param  array<string, int|null>  $regularTime
+     * @param  array<string, int|null>  $regulation
      * @param  array<string, int|null>  $extraTime
      * @return array{0: int|null, 1: int|null}
      */
-    protected function shootoutScore(array $fullTime, array $regularTime, array $extraTime): array
+    protected function shootoutScore(array $fullTime, array $regulation, array $extraTime): array
     {
-        if (! isset($fullTime['home'], $fullTime['away'], $regularTime['home'], $regularTime['away'])) {
+        if (! isset($fullTime['home'], $fullTime['away'], $regulation['home'], $regulation['away'])) {
             return [null, null];
         }
 
@@ -357,8 +412,8 @@ class FootballDataSync
         $extraAway = $extraTime['away'] ?? 0;
 
         return [
-            $fullTime['home'] - $regularTime['home'] - $extraHome,
-            $fullTime['away'] - $regularTime['away'] - $extraAway,
+            $fullTime['home'] - $regulation['home'] - $extraHome,
+            $fullTime['away'] - $regulation['away'] - $extraAway,
         ];
     }
 

@@ -121,6 +121,64 @@ class FootballDataSyncTest extends TestCase
         $this->assertSame(0, Prediction::where('user_id', $missUser->id)->first()->points);
     }
 
+    public function test_extra_time_win_with_empty_regular_time_stores_the_90_minute_score(): void
+    {
+        // Belgium–Senegal (LAST_32): football-data laat regularTime leeg maar
+        // verwerkt de verlengingsgoal in extraTime én fullTime, en labelt de
+        // duur foutief als REGULAR. De stand na 90 min = fullTime − extraTime.
+        Http::fake([
+            'api.football-data.org/*' => Http::response([
+                'matches' => [[
+                    'id' => 537422,
+                    'status' => 'FINISHED',
+                    'utcDate' => '2026-07-01T20:00:00Z',
+                    'stage' => 'LAST_32',
+                    'homeTeam' => ['id' => 1, 'name' => 'Belgium', 'tla' => 'BEL'],
+                    'awayTeam' => ['id' => 2, 'name' => 'Senegal', 'tla' => 'SEN'],
+                    'score' => [
+                        'winner' => 'HOME_TEAM',
+                        'duration' => 'REGULAR',
+                        'fullTime' => ['home' => 3, 'away' => 2],
+                        'halfTime' => ['home' => 0, 'away' => 1],
+                        'regularTime' => ['home' => null, 'away' => null],
+                        'extraTime' => ['home' => 1, 'away' => 0],
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $tournament = Tournament::create(['name' => 'WK', 'code' => 'WC', 'is_active' => true]);
+        $match = GameMatch::create([
+            'tournament_id' => $tournament->id,
+            'external_id' => 537422,
+            'kickoff_at' => '2026-07-01 20:00:00',
+            'status' => 'TIMED',
+        ]);
+
+        $exactUser = User::factory()->create();
+        Prediction::create(['user_id' => $exactUser->id, 'match_id' => $match->id, 'home_score' => 2, 'away_score' => 2]);
+
+        $missUser = User::factory()->create();
+        Prediction::create(['user_id' => $missUser->id, 'match_id' => $match->id, 'home_score' => 3, 'away_score' => 2]);
+
+        app(FootballDataSync::class)->syncResults($tournament);
+
+        $match->refresh();
+        // 90-minutenstand, niet de 3-2 na verlenging.
+        $this->assertSame(2, $match->home_score);
+        $this->assertSame(2, $match->away_score);
+        $this->assertSame('EXTRA_TIME', $match->decided_by);
+        // De doorgestoten ploeg blijft België (winnaar via fullTime).
+        $this->assertSame('HOME_TEAM', $match->winner);
+        $this->assertTrue($match->wentToExtraTime());
+        $this->assertNull($match->penalty_home_score);
+
+        // 2-2 voorspeld = exact (5 punten). 3-2 (de ET-stand) is niet langer
+        // exact: enkel het uitdoelpunt (2) klopt, goed voor 1 punt.
+        $this->assertSame(5, Prediction::where('user_id', $exactUser->id)->first()->points);
+        $this->assertSame(1, Prediction::where('user_id', $missUser->id)->first()->points);
+    }
+
     public function test_a_degraded_penalty_payload_does_not_wipe_a_resolved_winner(): void
     {
         // football-data soms degradeert een beslist duel terug naar een gelijke
