@@ -9,15 +9,15 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Refresh fixtures/teams once a day, outside match hours.
-Schedule::command('sync:fixtures')->dailyAt('04:00');
+//Schedule::command('sync:fixtures')->dailyAt('04:00');
 
 // Pull results and award points regularly; ~2 calls per run keeps us
 // comfortably within football-data's 10 calls/minute free-tier limit.
-Schedule::command('sync:results')->everyThirtyMinutes();
+//Schedule::command('sync:results')->everyThirtyMinutes();
 
 // Refresh 1X2 odds a few times a day (The Odds API free tier is request-limited).
-Schedule::command('sync:odds')->everySixHours();
+//Schedule::command('sync:odds')->everySixHours();
 
 // Announce newly opened knockout rounds and remind participants who still owe
 // predictions, 24h + 2h before each round's deadline (its first kickoff).
-Schedule::command('predictions:remind')->hourly()->withoutOverlapping();
+//Schedule::command('predictions:remind')->hourly()->withoutOverlapping();
